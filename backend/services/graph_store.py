@@ -40,6 +40,9 @@ class GraphStore:
             self._initialized = True
             return self._graph_builder
 
+    def reset(self) -> GraphBuilder:
+        return self.initialize(force=True)
+
     @property
     def graph(self) -> GraphBuilder:
         if self._graph_builder is None:

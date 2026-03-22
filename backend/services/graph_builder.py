@@ -62,43 +62,66 @@ class GraphBuilder:
                 self._add_edge(self._node_key("invoice", invoice_id), payment_key, "invoice_to_payment")
 
     def _add_entity_node(self, entity_type: str, entity: Any) -> None:
-        node_key = self._node_key(entity_type, entity.id)
-        payload = entity.model_dump(mode="json")
-        payload["entity_type"] = entity_type
-        payload["entity_id"] = entity.id
-        payload["label"] = entity.id
-        self.graph.add_node(node_key, **payload)
+        self.add_node(entity.id, entity_type, entity.model_dump(mode="json"))
 
     def _add_edge(self, source: str, target: str, edge_type: str) -> None:
         if not self.graph.has_node(source) or not self.graph.has_node(target):
             return
+        edge_id = f"{edge_type}:{source}:{target}:{self.graph.number_of_edges(source, target)}"
         self.graph.add_edge(
             source,
             target,
-            key=f"{edge_type}:{source}:{target}",
+            key=edge_id,
             edge_type=edge_type,
+            relationship=edge_type,
             source=source,
             target=target,
         )
 
-    def _resolve_node_key(self, node_id: str) -> str | None:
+    def _resolve_node_key(self, node_id: str, entity_type: str | None = None) -> str | None:
+        if entity_type:
+            node_key = self._node_key(entity_type.lower(), node_id)
+            if self.graph.has_node(node_key):
+                return node_key
         if self.graph.has_node(node_id):
             return node_id
 
         matches = [
             candidate
             for candidate, attrs in self.graph.nodes(data=True)
-            if attrs.get("entity_id") == node_id
+            if attrs.get("entity_id") == node_id and (entity_type is None or attrs.get("entity_type") == entity_type.lower())
         ]
         if len(matches) == 1:
             return matches[0]
         return None
 
+    def add_node(self, entity_id: str, entity_type: str, metadata: dict[str, Any] | None = None) -> dict[str, Any]:
+        normalized_type = entity_type.lower()
+        node_key = self._node_key(normalized_type, entity_id)
+        payload = dict(metadata or {})
+        payload.setdefault("id", entity_id)
+        payload["entity_type"] = normalized_type
+        payload["entity_id"] = entity_id
+        payload.setdefault("label", entity_id)
+        self.graph.add_node(node_key, **payload)
+        return dict(self.graph.nodes[node_key])
+
+    def add_edge(self, source: str, target: str, relationship: str) -> dict[str, Any]:
+        source_key = self._resolve_node_key(source)
+        target_key = self._resolve_node_key(target)
+        if source_key is None or target_key is None:
+            raise ValueError("Both source and target nodes must exist before adding an edge.")
+        self._add_edge(source_key, target_key, relationship)
+        edge_key = next(reversed(list(self.graph[source_key][target_key].keys())))
+        return dict(self.graph[source_key][target_key][edge_key])
+
     def get_node(self, node_id: str) -> dict[str, Any] | None:
         node_key = self._resolve_node_key(node_id)
         if node_key is None:
             return None
-        return dict(self.graph.nodes[node_key])
+        payload = dict(self.graph.nodes[node_key])
+        payload["node_key"] = node_key
+        return payload
 
     def get_neighbors(self, node_id: str) -> list[dict[str, Any]]:
         node_key = self._resolve_node_key(node_id)
@@ -122,19 +145,23 @@ class GraphBuilder:
         lengths = nx.single_source_shortest_path_length(undirected, node_key, cutoff=max(depth, 0))
         return self.graph.subgraph(lengths.keys()).copy()
 
-    def to_json(self) -> dict[str, list[dict[str, Any]]]:
+    def serialize_graph(self, graph: nx.MultiDiGraph | None = None) -> dict[str, list[dict[str, Any]]]:
+        target_graph = graph or self.graph
         nodes = []
         edges = []
 
-        for node_key, attrs in self.graph.nodes(data=True):
-            node_data = {"id": node_key, **attrs}
+        for node_key, attrs in target_graph.nodes(data=True):
+            node_data = {**attrs, "id": node_key, "node_key": node_key}
             nodes.append({"data": node_data})
 
-        for source, target, key, attrs in self.graph.edges(keys=True, data=True):
+        for source, target, key, attrs in target_graph.edges(keys=True, data=True):
             edge_data = {"id": key, "source": source, "target": target, **attrs}
             edges.append({"data": edge_data})
 
         return {"nodes": nodes, "edges": edges}
+
+    def to_json(self) -> dict[str, list[dict[str, Any]]]:
+        return self.serialize_graph()
 
     def get_stats(self) -> dict[str, Any]:
         node_counts = Counter(attrs.get("entity_type", "unknown") for _, attrs in self.graph.nodes(data=True))
