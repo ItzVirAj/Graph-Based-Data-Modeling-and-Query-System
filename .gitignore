@@ -1,0 +1,58 @@
+# OS
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Editors
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.venv/
+venv/
+env/
+
+# Node
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+logs/
+
+# Build artifacts
+build/
+tmp/
+temp/
+.cache/
+
+# Data outputs
+artifacts/
+exports/
+*.parquet
+*.feather
+*.sqlite
+*.db
+
+# Local tooling
+pip-wheel-metadata/
+frontend/.vite/
+
+# Local attachments
+*.pdf
