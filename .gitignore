@@ -56,3 +56,6 @@ frontend/.vite/
 
 # Local attachments
 *.pdf
+
+!backend/logs/
+!backend/logs/llm_sessions.md
