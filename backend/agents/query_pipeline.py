@@ -81,6 +81,14 @@ class QueryPipeline:
                 "raw_data": None,
             }
 
+        self._append_log(
+            stage="translation-refinement",
+            question=question,
+            prompt="Normalized structured query prepared for graph execution",
+            response=structured_query.model_dump_json(indent=2),
+            notes="Structured query accepted and passed to the Python executor.",
+        )
+
         raw_data = self._execute(structured_query)
         answer = await self._generate_answer(question, structured_query, raw_data)
         return {

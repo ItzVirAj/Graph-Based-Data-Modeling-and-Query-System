@@ -96,3 +96,85 @@ Mock answer generator used
 ```text
 I found a related chain in the graph: 740509 -> 80738040 -> 90504204 -> 9400000205 -> 9400635988.
 ```
+
+
+## 2026-03-22T19:11:09.996971Z | translation-mock
+- Question: trace invoice 90504204 flow
+- Notes: No Gemini API key found, using mock mode
+
+### Prompt
+```text
+Mock translator used
+```
+
+### Response
+```text
+{
+  "operation": "chain",
+  "entity": "Invoice",
+  "filters": {
+    "id": "90504204"
+  },
+  "traverse_to": null,
+  "depth": 4,
+  "aggregation": null,
+  "aggregation_field": null,
+  "reason": null
+}
+```
+
+
+## 2026-03-22T19:11:09.997970Z | translation-refinement
+- Question: trace invoice 90504204 flow
+- Notes: Structured query accepted and passed to the Python executor.
+
+### Prompt
+```text
+Normalized structured query prepared for graph execution
+```
+
+### Response
+```text
+{
+  "operation": "chain",
+  "entity": "Invoice",
+  "filters": {
+    "id": "90504204"
+  },
+  "traverse_to": null,
+  "depth": 4,
+  "aggregation": null,
+  "aggregation_field": null,
+  "reason": null
+}
+```
+
+
+## 2026-03-22T19:11:09.999004Z | answer-mock
+- Question: trace invoice 90504204 flow
+- Notes: No Gemini API key found, using mock mode
+
+### Prompt
+```text
+Mock answer generator used
+```
+
+### Response
+```text
+I found a related chain in the graph: 740509 -> 80738040 -> 90504204 -> 9400000205 -> 9400635988.
+```
+
+
+## 2026-03-22T19:11:10.003027Z | guardrail
+- Question: What is the capital of France?
+- Notes: Rejected as out-of-domain query.
+
+### Prompt
+```text
+
+```
+
+### Response
+```text
+This system is designed to answer questions related to the dataset only.
+```

@@ -1,220 +1,209 @@
 # SAP O2C Graph Query System
 
-Scaffold for a graph-based data modeling and query platform over SAP Order-to-Cash datasets.
+A full-stack graph exploration system for SAP Order-to-Cash data. The backend ingests raw O2C datasets, normalizes business entities, builds an in-memory NetworkX graph, and exposes graph/query APIs through FastAPI. The frontend renders the graph with Cytoscape.js and adds a natural-language chat workflow for guided exploration.
 
-This repository is intentionally initialized without implementation code. It contains:
+## What This Project Does
 
-- a Python backend scaffold for ingestion, normalization, graph construction, query orchestration, and APIs
-- a React + Vite + TypeScript frontend scaffold for graph exploration and LLM-assisted querying
-- shared contracts/config placeholders for normalized entities, graph metadata, and dataset mappings
-- documentation placeholders for data dictionary, graph model, and query flows
+- Loads SAP O2C datasets from `sap-o2c-data`
+- Normalizes Orders, Deliveries, Invoices, Payments, Customers, Products, and Addresses
+- Builds a typed relationship graph in NetworkX
+- Exposes graph inspection and mutation APIs with FastAPI
+- Supports natural-language querying through a unified LLM query pipeline
+- Visualizes nodes, edges, metadata, and query highlights in React + Cytoscape.js
 
-## Scope
+## Dataset Scope
 
-The raw data currently available in [`sap-o2c-data`](/c:/Projects/DodgeAI-Assignment/sap-o2c-data) contains 49 JSONL files across 18 logical dataset groups:
+The current dataset covers the order-to-cash chain:
 
-- `sales_order_headers`
-- `sales_order_items`
-- `sales_order_schedule_lines`
-- `outbound_delivery_headers`
-- `outbound_delivery_items`
-- `billing_document_headers`
-- `billing_document_items`
-- `billing_document_cancellations`
-- `journal_entry_items_accounts_receivable`
-- `payments_accounts_receivable`
-- `business_partners`
-- `business_partner_addresses`
-- `customer_company_assignments`
-- `customer_sales_area_assignments`
-- `products`
-- `product_descriptions`
-- `product_plants`
-- `product_storage_locations`
-- `plants`
+`Customer -> Order -> Delivery -> Invoice -> Payment`
 
-The observed business flow is:
+Supported graph node types:
 
-`Customer -> Sales Order -> Delivery -> Invoice -> AR Journal / Payment`
+- `Order`
+- `Delivery`
+- `Invoice`
+- `Payment`
+- `Customer`
+- `Product`
+- `Address`
 
-Supporting master-data domains:
+Primary edge patterns:
 
-- customer and address
-- product and product description
-- plant and storage location
-- customer company and sales area assignments
+- `Order -> Delivery`
+- `Delivery -> Invoice`
+- `Invoice -> Payment`
+- `Order -> Customer`
+- `Order -> Product`
+- `Customer -> Address`
 
-## Target Architecture
+## Architecture
 
 ```text
-                        +----------------------+
-                        |   Raw SAP O2C Files  |
-                        | CSV / JSON / JSONL   |
-                        +----------+-----------+
-                                   |
-                                   v
-                    +--------------+---------------+
-                    | Ingestion + Schema Inspection |
-                    | file loaders, profiling,      |
-                    | source metadata capture       |
-                    +--------------+---------------+
-                                   |
-                                   v
-                    +--------------+---------------+
-                    | Normalization Layer           |
-                    | canonical IDs, typed fields,  |
-                    | entity mapping, validation    |
-                    +--------------+---------------+
-                                   |
-                 +-----------------+------------------+
-                 |                                    |
-                 v                                    v
-    +------------+------------+          +------------+------------+
-    | Normalized Entity Store |          | Graph Builder           |
-    | orders, deliveries,     |          | NetworkX nodes/edges,   |
-    | invoices, payments,     |          | lineage and traversal   |
-    | customers, products     |          +------------+------------+
-    +------------+------------+                       |
-                 |                                    v
-                 |                     +--------------+---------------+
-                 |                     | Query Engine + LLM Agents     |
-                 |                     | intent parsing, tool routing, |
-                 |                     | graph + tabular responses     |
-                 |                     +--------------+---------------+
-                 |                                    |
-                 +--------------------+---------------+
-                                      |
-                                      v
-                        +-------------+--------------+
-                        | FastAPI Backend            |
-                        | datasets, graph, lineage,  |
-                        | query, health endpoints    |
-                        +-------------+--------------+
-                                      |
-                                      v
-                        +-------------+--------------+
-                        | React UI (Vite + TS)       |
-                        | Cytoscape graph canvas,    |
-                        | dataset panels, query UX   |
-                        +----------------------------+
++-----------------------+        +---------------------------+
+| Raw SAP O2C Files     |        | Frontend (React + Vite)   |
+| CSV / JSON / JSONL    |        | Cytoscape.js + Tailwind   |
++-----------+-----------+        +-------------+-------------+
+            |                                      |
+            v                                      |
++-----------+-----------+                          |
+| Data Loader            |                         |
+| format handling        |                         |
+| schema normalization   |                         |
+| Pydantic validation    |                         |
++-----------+-----------+                          |
+            |                                      |
+            v                                      v
++-----------+-----------+        +---------------------------+
+| Graph Builder          |<------| FastAPI REST API          |
+| NetworkX MultiDiGraph  |       | graph/query endpoints     |
+| typed nodes + edges    |       | in-memory graph store     |
++-----------+-----------+        +-------------+-------------+
+            |                                      |
+            v                                      |
++-----------+-----------+                          |
+| Query Pipeline         |-------------------------+
+| guardrail              |
+| LLM translation        |
+| Python execution       |
+| LLM answer generation  |
++-----------------------+
 ```
 
 ## Repository Layout
 
 ```text
-.
-|-- backend/
-|   |-- app/
-|   |   |-- api/
-|   |   |   `-- routes/
-|   |   |-- agents/
-|   |   |-- core/
-|   |   |-- graph/
-|   |   |-- ingestion/
-|   |   |-- models/
-|   |   |-- normalization/
-|   |   |-- repositories/
-|   |   |-- schemas/
-|   |   `-- utils/
-|   `-- tests/
-|-- docs/
-|-- frontend/
-|   |-- public/
-|   `-- src/
-|       |-- app/
-|       |-- components/
-|       |-- features/
-|       |-- hooks/
-|       |-- lib/
-|       |-- pages/
-|       |-- services/
-|       |-- styles/
-|       `-- types/
-|-- scripts/
-|-- shared/
-|   |-- config/
-|   `-- contracts/
-`-- sap-o2c-data/
+backend/
+  agents/              LLM client, schema context, NL query pipeline
+  logs/                LLM session markdown logs
+  prompts/             example natural-language prompts
+  routes/              FastAPI route modules
+  services/            data loading, graph building, graph store
+  tests/               backend tests
+  main.py              FastAPI entrypoint
+frontend/
+  src/components/      graph viewer, toolbar, detail panel, chat panel
+  src/services/        API client
+  src/types/           frontend API and graph typings
+sap-o2c-data/          raw SAP O2C files
 ```
 
-## Backend Responsibilities
+## Backend Setup
 
-- `app/ingestion`: read CSV, JSON, and JSONL; capture schema profiles and source metadata
-- `app/normalization`: map raw fields to canonical entities and validate normalized records
-- `app/graph`: build and query the NetworkX graph plus lineage structures
-- `app/agents`: LLM orchestration layer for natural-language query translation and tool use
-- `app/api/routes`: FastAPI endpoints for health, datasets, graph views, lineage, and query execution
-- `app/models` and `app/schemas`: internal domain models and API payload definitions
-
-## Frontend Responsibilities
-
-- graph visualization with Cytoscape.js
-- natural-language query entry and results display
-- dataset and entity exploration panels
-- lineage and relationship inspection
-- API client and typed contract layer
-
-## Initial Normalized Entity Model
-
-Planned canonical entities:
-
-- `customer`
-- `address`
-- `customer_company`
-- `customer_sales_area`
-- `product`
-- `product_description`
-- `plant`
-- `product_plant`
-- `product_storage_location`
-- `sales_order`
-- `sales_order_item`
-- `sales_order_schedule_line`
-- `delivery`
-- `delivery_item`
-- `invoice`
-- `invoice_item`
-- `ar_document`
-- `payment`
-
-Key business identifiers expected across the system:
-
-- `customer_id`
-- `address_id`
-- `product_id`
-- `plant_id`
-- `order_id`
-- `order_item_id`
-- `delivery_id`
-- `delivery_item_id`
-- `invoice_id`
-- `invoice_item_id`
-- `accounting_document_id`
-- `payment_document_id`
-
-## Planned API Surface
-
-- `GET /health`
-- `GET /datasets`
-- `GET /datasets/{dataset_name}/schema`
-- `GET /graph/summary`
-- `POST /graph/subgraph`
-- `GET /lineage/{entity_type}/{entity_id}`
-- `POST /query`
-
-## Dependencies
-
-Dependency manifests are intentionally limited to:
-
-- [`backend/requirements.txt`](/c:/Projects/DodgeAI-Assignment/backend/requirements.txt)
-- [`frontend/package.json`](/c:/Projects/DodgeAI-Assignment/frontend/package.json)
-
-All other source and config files are placeholders only at this stage.
-
-## Next Step
-
-After reviewing the scaffold, initialize version control:
+1. Create a virtual environment.
+2. Install dependencies.
+3. Configure environment variables.
+4. Start the API server.
 
 ```bash
-git init && git add . && git commit -m "chore: initial project scaffold"
+cd backend
+python -m venv .venv
+.venv\Scripts\activate
+pip install -r requirements.txt
+cd ..
+copy .env.example .env
+uvicorn backend.main:app --reload
 ```
+
+Backend API will be available at `http://localhost:8000`.
+
+## Frontend Setup
+
+1. Install frontend dependencies.
+2. Start the Vite dev server.
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Frontend will be available at `http://localhost:5173`.
+
+## Environment Variables
+
+Create a root `.env` file from `.env.example`.
+
+Current LLM integration uses Gemini via `GEMINI_API_KEY`. If the key is missing, the backend automatically falls back to a rule-based mock mode for translation and answer generation.
+
+The user request mentioned an OpenAI API key, so the template also includes `OPENAI_API_KEY` as a placeholder for future provider swaps. The current backend does not use it yet.
+
+Example:
+
+```env
+GEMINI_API_KEY=your_gemini_api_key_here
+OPENAI_API_KEY=
+VITE_API_BASE_URL=http://localhost:8000
+```
+
+## Running The Full App
+
+Start the backend first:
+
+```bash
+uvicorn backend.main:app --reload
+```
+
+Then start the frontend in a second terminal:
+
+```bash
+cd frontend
+npm run dev
+```
+
+## Sample Questions
+
+- Show me all orders for customer 320000083
+- What invoices are linked to delivery 80738040?
+- Show the full chain from order 740509 to payment
+- Count all invoices in the graph
+- Which products appear in the most orders?
+- What payments are connected to invoice 90504204?
+- Show addresses for customer 320000083
+- Trace invoice 90504204 flow
+- What is the weather in Mumbai today?
+  This should be rejected by the guardrail.
+
+More examples live in `backend/prompts/example_prompts.md`.
+
+## API Highlights
+
+- `GET /api/graph`
+- `GET /api/graph/stats`
+- `GET /api/node/{node_id}`
+- `GET /api/node/{node_id}/subgraph?depth=2`
+- `POST /api/graph/node`
+- `POST /api/graph/edge`
+- `DELETE /api/graph/reset`
+- `GET /api/graph/export`
+- `POST /api/query`
+
+## Screenshots
+
+Add screenshots here as the UI is finalized.
+
+- `docs/screenshots/graph-overview.png` - full graph view placeholder
+- `docs/screenshots/node-detail.png` - node metadata panel placeholder
+- `docs/screenshots/chat-query.png` - natural-language query workflow placeholder
+- `docs/screenshots/subgraph-highlight.png` - graph highlight/subgraph placeholder
+
+## Logging
+
+Every query appends a markdown entry to `backend/logs/llm_sessions.md`.
+
+The log captures:
+
+- guardrail decisions
+- translator prompt/response
+- translation refinement passed to execution
+- answer-generation prompt/response
+- fallback notes when mock mode is used
+
+## Integration Notes
+
+This repository has been verified locally with:
+
+- backend graph tests via `pytest`
+- frontend production build via `npm run build`
+- API smoke checks for graph load, node detail, query, add node, add edge, export, and reset
+
+Visual browser interactions still depend on opening the running app locally, but the underlying API flow and frontend build path have been validated.
