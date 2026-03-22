@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 
+import { ChatPanel } from "./components/ChatPanel";
 import { GraphViewer } from "./components/GraphViewer";
 import { NodeDetail } from "./components/NodeDetail";
 import { Toolbar } from "./components/Toolbar";
@@ -9,6 +10,7 @@ export default function App() {
   const [selectedNode, setSelectedNode] = useState<NodeSummary | null>(null);
   const [refreshToken, setRefreshToken] = useState(0);
   const [expandTarget, setExpandTarget] = useState<{ nodeId: string; depth: number } | null>(null);
+  const [highlightedNodes, setHighlightedNodes] = useState<string[]>([]);
   const [statusMessage, setStatusMessage] = useState("Graph loaded from the backend API.");
 
   const viewerKey = useMemo(
@@ -24,6 +26,7 @@ export default function App() {
   const handleExpand = (nodeId: string, depth: number) => {
     setStatusMessage(`Expanded graph around ${nodeId} with depth ${depth}.`);
     setExpandTarget({ nodeId, depth });
+    setHighlightedNodes([nodeId]);
   };
 
   const handleShowFullGraph = () => {
@@ -34,8 +37,8 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
-      <div className="mx-auto flex min-h-screen max-w-[1800px] flex-col lg:flex-row">
-        <aside className="w-full border-b border-slate-800 bg-slate-900/95 p-4 lg:w-[380px] lg:border-b-0 lg:border-r">
+      <div className="mx-auto flex min-h-screen max-w-[1920px] flex-col lg:flex-row">
+        <aside className="w-full border-b border-slate-800 bg-slate-900/95 p-4 lg:w-[360px] lg:border-b-0 lg:border-r">
           <div className="flex h-full flex-col gap-4">
             <div className="rounded-2xl border border-slate-800 bg-slate-900 p-4 shadow-2xl shadow-slate-950/40">
               <p className="text-xs font-semibold uppercase tracking-[0.28em] text-cyan-400">
@@ -66,10 +69,14 @@ export default function App() {
           <GraphViewer
             key={viewerKey}
             expandTarget={expandTarget}
+            highlightedNodes={highlightedNodes}
+            onClearHighlights={() => setHighlightedNodes([])}
             onNodeSelect={setSelectedNode}
             refreshToken={refreshToken}
           />
         </main>
+
+        <ChatPanel highlightedNodes={highlightedNodes} onHighlightNodes={setHighlightedNodes} />
       </div>
     </div>
   );

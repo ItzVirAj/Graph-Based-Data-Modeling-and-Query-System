@@ -6,6 +6,7 @@ import type {
   GraphPayload,
   GraphStats,
   NodeDetailResponse,
+  QueryResponse,
 } from "../types/api";
 
 const api = axios.create({
@@ -58,6 +59,11 @@ export async function exportGraphJson(): Promise<Blob> {
   const response = await api.get("/api/graph/export", {
     responseType: "blob",
   });
+  return response.data;
+}
+
+export async function queryGraph(question: string): Promise<QueryResponse> {
+  const response = await api.post<QueryResponse>("/api/query", { question });
   return response.data;
 }
 

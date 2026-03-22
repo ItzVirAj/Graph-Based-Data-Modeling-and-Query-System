@@ -11,6 +11,8 @@ cytoscape.use(coseBilkent);
 
 interface GraphViewerProps {
   expandTarget: { nodeId: string; depth: number } | null;
+  highlightedNodes: string[];
+  onClearHighlights: () => void;
   onNodeSelect: (node: NodeSummary | null) => void;
   refreshToken: number;
 }
@@ -21,7 +23,13 @@ function toElements(payload: GraphPayload): ElementDefinition[] {
   return [...nodes, ...edges];
 }
 
-export function GraphViewer({ expandTarget, onNodeSelect, refreshToken }: GraphViewerProps) {
+export function GraphViewer({
+  expandTarget,
+  highlightedNodes,
+  onClearHighlights,
+  onNodeSelect,
+  refreshToken,
+}: GraphViewerProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const cyRef = useRef<Core | null>(null);
   const [loading, setLoading] = useState(true);
@@ -58,6 +66,7 @@ export function GraphViewer({ expandTarget, onNodeSelect, refreshToken }: GraphV
             height: "24",
             "border-width": "2px",
             "border-color": "#cbd5e1",
+            "overlay-opacity": 0,
           },
         },
         {
@@ -90,6 +99,16 @@ export function GraphViewer({ expandTarget, onNodeSelect, refreshToken }: GraphV
           },
         },
         {
+          selector: ".query-highlight",
+          style: {
+            "border-width": "5px",
+            "border-color": "#22d3ee",
+            "underlay-color": "#22d3ee",
+            "underlay-padding": "10px",
+            "underlay-opacity": 0.18,
+          },
+        },
+        {
           selector: ".faded",
           style: {
             opacity: 0.14,
@@ -105,6 +124,7 @@ export function GraphViewer({ expandTarget, onNodeSelect, refreshToken }: GraphV
       node.removeClass("faded").addClass("active-node");
       node.connectedEdges().removeClass("faded").addClass("active-edge");
       node.connectedEdges().connectedNodes().removeClass("faded");
+      onClearHighlights();
 
       onNodeSelect({
         nodeId: node.data("entity_id"),
@@ -119,6 +139,7 @@ export function GraphViewer({ expandTarget, onNodeSelect, refreshToken }: GraphV
       if (event.target === cy) {
         cy.elements().removeClass("active-node active-edge faded");
         onNodeSelect(null);
+        onClearHighlights();
       }
     });
 
@@ -128,7 +149,7 @@ export function GraphViewer({ expandTarget, onNodeSelect, refreshToken }: GraphV
       cy.destroy();
       cyRef.current = null;
     };
-  }, [onNodeSelect]);
+  }, [onClearHighlights, onNodeSelect]);
 
   useEffect(() => {
     let isActive = true;
@@ -170,6 +191,23 @@ export function GraphViewer({ expandTarget, onNodeSelect, refreshToken }: GraphV
       isActive = false;
     };
   }, [expandTarget, refreshToken]);
+
+  useEffect(() => {
+    if (!cyRef.current) {
+      return;
+    }
+
+    const cy = cyRef.current;
+    cy.nodes().removeClass("query-highlight");
+
+    if (!highlightedNodes.length) {
+      return;
+    }
+
+    const normalizedIds = new Set(highlightedNodes);
+    const matches = cy.nodes().filter((node) => normalizedIds.has(node.id()) || normalizedIds.has(node.data("entity_id")));
+    matches.addClass("query-highlight");
+  }, [highlightedNodes]);
 
   return (
     <div className="relative flex h-[70vh] min-h-[560px] flex-col lg:h-screen">

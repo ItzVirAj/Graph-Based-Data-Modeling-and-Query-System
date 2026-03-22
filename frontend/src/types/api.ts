@@ -67,3 +67,18 @@ export interface AddEdgePayload {
   target: string;
   relationship: string;
 }
+
+export interface QueryResponse {
+  answer: string;
+  relevant_node_ids: string[];
+  raw_data: unknown;
+}
+
+export interface ChatMessage {
+  id: string;
+  role: "user" | "assistant";
+  text: string;
+  relevantNodeIds?: string[];
+  rawData?: unknown;
+  rejected?: boolean;
+}
