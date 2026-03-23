@@ -8,7 +8,11 @@ A full-stack graph exploration system for SAP Order-to-Cash data. The backend in
 - Normalizes Orders, Deliveries, Invoices, Payments, Customers, Products, and Addresses
 - Builds a typed relationship graph in NetworkX
 - Loads normalized entities into an in-memory SQLite engine for transparent SQL translation
+<<<<<<< HEAD
 - Supports natural-language querying with Gemini `gemini-2.0-flash-lite`
+=======
+- Supports natural-language querying with Gemini `gemini-3.1-flash-lite-preview`
+>>>>>>> 7719ca3 (feat: bonus features - SQL translation, streaming, conversation memory, highlighting, clustering)
 - Streams query progress and answer generation back to the UI
 - Maintains lightweight per-session conversation memory for follow-up questions
 - Visualizes graph structure, node metadata, analytics overlays, and query-driven highlights in React + Cytoscape.js
@@ -172,7 +176,8 @@ Notes:
 
 - Gemini is the active provider.
 - If `GEMINI_API_KEY` is missing or quota-limited, the backend falls back to deterministic mock translation/answer generation.
-- The current model target is `gemini-2.0-flash-lite`.
+- The current model target is `gemini-3.1-flash-lite-preview`.
+
 
 ## Running The Full App
 
