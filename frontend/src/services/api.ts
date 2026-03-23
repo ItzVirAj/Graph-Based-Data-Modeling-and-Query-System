@@ -3,14 +3,19 @@ import axios from "axios";
 import type {
   AddEdgePayload,
   AddNodePayload,
+  BrokenFlowsResponse,
+  ClusterResponse,
   GraphPayload,
   GraphStats,
+  ImportanceResponse,
   NodeDetailResponse,
   QueryResponse,
 } from "../types/api";
 
+export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
+
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000",
+  baseURL: API_BASE_URL,
   headers: {
     "Content-Type": "application/json",
   },
@@ -62,9 +67,100 @@ export async function exportGraphJson(): Promise<Blob> {
   return response.data;
 }
 
-export async function queryGraph(question: string): Promise<QueryResponse> {
-  const response = await api.post<QueryResponse>("/api/query", { question });
+export async function fetchClusters(): Promise<ClusterResponse> {
+  const response = await api.get<ClusterResponse>("/api/graph/clusters");
   return response.data;
+}
+
+export async function fetchImportance(limit = 25): Promise<ImportanceResponse> {
+  const response = await api.get<ImportanceResponse>("/api/graph/importance", {
+    params: { limit },
+  });
+  return response.data;
+}
+
+export async function fetchBrokenFlows(): Promise<BrokenFlowsResponse> {
+  const response = await api.get<BrokenFlowsResponse>("/api/graph/broken-flows");
+  return response.data;
+}
+
+export async function clearSession(sessionId: string) {
+  await api.delete(`/api/session/${sessionId}`);
+}
+
+export async function queryGraph(question: string, sessionId: string): Promise<QueryResponse> {
+  const response = await api.post<QueryResponse>("/api/query", { question, session_id: sessionId }, {
+    headers: { "X-Session-Id": sessionId },
+  });
+  return response.data;
+}
+
+export interface StreamHandlers {
+  onStatus?: (payload: Record<string, unknown>) => void;
+  onQuery?: (payload: Record<string, unknown>) => void;
+  onToken?: (payload: Record<string, unknown>) => void;
+  onComplete?: (payload: QueryResponse) => void;
+}
+
+function parseSseChunk(chunk: string, emit: (eventName: string, payload: Record<string, unknown>) => void) {
+  const events = chunk.split("\n\n").filter(Boolean);
+  for (const eventBlock of events) {
+    const lines = eventBlock.split("\n");
+    const eventLine = lines.find((line) => line.startsWith("event:"));
+    const dataLine = lines.find((line) => line.startsWith("data:"));
+    if (!eventLine || !dataLine) {
+      continue;
+    }
+    const eventName = eventLine.replace("event:", "").trim();
+    const dataText = dataLine.replace("data:", "").trim();
+    try {
+      emit(eventName, JSON.parse(dataText) as Record<string, unknown>);
+    } catch {
+      emit(eventName, { text: dataText });
+    }
+  }
+}
+
+export async function streamGraphQuery(question: string, sessionId: string, handlers: StreamHandlers): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/api/query/stream`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Session-Id": sessionId,
+    },
+    body: JSON.stringify({ question, session_id: sessionId }),
+  });
+
+  if (!response.ok || !response.body) {
+    throw new Error("Streaming request failed.");
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) {
+      break;
+    }
+    buffer += decoder.decode(value, { stream: true });
+    const parts = buffer.split("\n\n");
+    buffer = parts.pop() ?? "";
+    for (const part of parts) {
+      parseSseChunk(`${part}\n\n`, (eventName, payload) => {
+        if (eventName === "status") {
+          handlers.onStatus?.(payload);
+        } else if (eventName === "query") {
+          handlers.onQuery?.(payload);
+        } else if (eventName === "token") {
+          handlers.onToken?.(payload);
+        } else if (eventName === "complete") {
+          handlers.onComplete?.(payload as unknown as QueryResponse);
+        }
+      });
+    }
+  }
 }
 
 export { api };

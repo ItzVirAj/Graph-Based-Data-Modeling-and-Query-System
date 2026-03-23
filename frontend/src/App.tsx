@@ -4,16 +4,26 @@ import { ChatPanel } from "./components/ChatPanel";
 import { GraphViewer } from "./components/GraphViewer";
 import { NodeDetail } from "./components/NodeDetail";
 import { Toolbar } from "./components/Toolbar";
-import type { NodeSummary } from "./types/api";
+import type { AnalyticsView, NodeSummary } from "./types/api";
+
+interface QueryHighlightState {
+  edgeIds: string[];
+  nodeIds: string[];
+  primaryNodeId: string | null;
+  reasons: Record<string, string>;
+}
+
+const DEFAULT_ANALYTICS_VIEW: AnalyticsView = { mode: "default" };
 
 export default function App() {
   const [selectedNode, setSelectedNode] = useState<NodeSummary | null>(null);
   const [refreshToken, setRefreshToken] = useState(0);
   const [expandTarget, setExpandTarget] = useState<{ nodeId: string; depth: number } | null>(null);
-  const [highlightedNodes, setHighlightedNodes] = useState<string[]>([]);
-  const [focusedNodeId, setFocusedNodeId] = useState<string | null>(null);
+  const [highlightState, setHighlightState] = useState<QueryHighlightState>({ edgeIds: [], nodeIds: [], primaryNodeId: null, reasons: {} });
   const [statusMessage, setStatusMessage] = useState("Graph loaded from the backend API.");
   const [isConsoleOpen, setIsConsoleOpen] = useState(true);
+  const [chatScrollNodeId, setChatScrollNodeId] = useState<string | null>(null);
+  const [analyticsView, setAnalyticsView] = useState<AnalyticsView>(DEFAULT_ANALYTICS_VIEW);
 
   const viewerKey = useMemo(
     () => `${refreshToken}:${expandTarget?.nodeId ?? "full"}:${expandTarget?.depth ?? 0}`,
@@ -21,8 +31,7 @@ export default function App() {
   );
 
   const handleClearHighlights = useCallback(() => {
-    setHighlightedNodes([]);
-    setFocusedNodeId(null);
+    setHighlightState({ edgeIds: [], nodeIds: [], primaryNodeId: null, reasons: {} });
   }, []);
 
   const handleGraphChanged = (message: string) => {
@@ -33,16 +42,22 @@ export default function App() {
   const handleExpand = (nodeId: string, depth: number) => {
     setStatusMessage(`Expanded graph around ${nodeId} with depth ${depth}.`);
     setExpandTarget({ nodeId, depth });
-    setHighlightedNodes([nodeId]);
-    setFocusedNodeId(nodeId);
+    setHighlightState({ edgeIds: [], nodeIds: [nodeId], primaryNodeId: nodeId, reasons: { [nodeId]: `Matched: id=${nodeId}` } });
   };
 
   const handleShowFullGraph = () => {
     setStatusMessage("Showing the full graph.");
     setExpandTarget(null);
-    setFocusedNodeId(null);
-    setHighlightedNodes([]);
     setRefreshToken((current) => current + 1);
+  };
+
+  const handleApplyQueryFocus = (payload: QueryHighlightState) => {
+    setHighlightState(payload);
+  };
+
+  const handleAnalyticsChange = (view: AnalyticsView, message: string) => {
+    setAnalyticsView(view);
+    setStatusMessage(message);
   };
 
   return (
@@ -105,15 +120,11 @@ export default function App() {
               </div>
 
               <div className="shrink-0">
-                <Toolbar onGraphChanged={handleGraphChanged} onShowFullGraph={handleShowFullGraph} />
+                <Toolbar onAnalyticsChange={handleAnalyticsChange} onGraphChanged={handleGraphChanged} onShowFullGraph={handleShowFullGraph} />
               </div>
 
               <div className="mt-4 min-h-0 flex-1">
-                <NodeDetail
-                  key={selectedNode?.nodeKey ?? "empty"}
-                  onExpand={handleExpand}
-                  selectedNode={selectedNode}
-                />
+                <NodeDetail key={selectedNode?.nodeKey ?? "empty"} onExpand={handleExpand} selectedNode={selectedNode} />
               </div>
 
               <div className="mt-4 shrink-0 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
@@ -124,19 +135,29 @@ export default function App() {
 
           <GraphViewer
             key={viewerKey}
+            analyticsView={analyticsView}
             expandTarget={expandTarget}
-            focusedNodeId={focusedNodeId}
-            highlightedNodes={highlightedNodes}
+            focusedNodeId={highlightState.primaryNodeId}
+            highlightedEdges={highlightState.edgeIds}
+            highlightedNodes={highlightState.nodeIds}
+            highlightReasons={highlightState.reasons}
             onClearHighlights={handleClearHighlights}
+            onHighlightedNodeTap={setChatScrollNodeId}
             onNodeSelect={setSelectedNode}
             refreshToken={refreshToken}
           />
         </section>
 
         <ChatPanel
-          highlightedNodes={highlightedNodes}
-          onFocusNode={setFocusedNodeId}
-          onHighlightNodes={setHighlightedNodes}
+          highlightedNodes={highlightState.nodeIds}
+          onApplyQueryFocus={handleApplyQueryFocus}
+          onClearHighlights={handleClearHighlights}
+          onResetConversationView={() => {
+            handleClearHighlights();
+            setChatScrollNodeId(null);
+          }}
+          onStatusChange={setStatusMessage}
+          scrollToNodeId={chatScrollNodeId}
         />
       </div>
     </div>

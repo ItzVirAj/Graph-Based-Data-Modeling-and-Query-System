@@ -1,31 +1,25 @@
 import { useState } from "react";
 
-import { addGraphEdge, addGraphNode, exportGraphJson, resetGraph } from "../services/api";
+import { addGraphEdge, addGraphNode, exportGraphJson, fetchBrokenFlows, fetchClusters, fetchImportance, resetGraph } from "../services/api";
+import type { AnalyticsView } from "../types/api";
 
 interface ToolbarProps {
+  onAnalyticsChange: (view: AnalyticsView, message: string) => void;
   onGraphChanged: (message: string) => void;
   onShowFullGraph: () => void;
 }
 
 type ModalMode = "node" | "edge" | null;
 
-const inputClassName =
-  "w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-100";
+const inputClassName = "w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-100";
+const CLUSTER_COLORS = ["#3b82f6", "#ef4444", "#10b981", "#f59e0b", "#8b5cf6", "#06b6d4", "#ec4899", "#84cc16"];
 
-export function Toolbar({ onGraphChanged, onShowFullGraph }: ToolbarProps) {
+export function Toolbar({ onAnalyticsChange, onGraphChanged, onShowFullGraph }: ToolbarProps) {
   const [modalMode, setModalMode] = useState<ModalMode>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [nodeForm, setNodeForm] = useState({
-    id: "",
-    type: "Product",
-    metadata: '{\n  "name": "Sample Node"\n}',
-  });
-  const [edgeForm, setEdgeForm] = useState({
-    source: "",
-    target: "",
-    relationship: "order_to_product",
-  });
+  const [nodeForm, setNodeForm] = useState({ id: "", type: "Product", metadata: '{\n  "name": "Sample Node"\n}' });
+  const [edgeForm, setEdgeForm] = useState({ source: "", target: "", relationship: "order_to_product" });
 
   const closeModal = () => {
     setError(null);
@@ -36,11 +30,7 @@ export function Toolbar({ onGraphChanged, onShowFullGraph }: ToolbarProps) {
     setSubmitting(true);
     setError(null);
     try {
-      await addGraphNode({
-        id: nodeForm.id,
-        type: nodeForm.type,
-        metadata: JSON.parse(nodeForm.metadata),
-      });
+      await addGraphNode({ id: nodeForm.id, type: nodeForm.type, metadata: JSON.parse(nodeForm.metadata) });
       closeModal();
       onGraphChanged(`Added ${nodeForm.type} node ${nodeForm.id}.`);
     } catch (submitError) {
@@ -70,6 +60,7 @@ export function Toolbar({ onGraphChanged, onShowFullGraph }: ToolbarProps) {
     try {
       await resetGraph();
       onShowFullGraph();
+      onAnalyticsChange({ mode: "default" }, "Reset analytics overlays.");
       onGraphChanged("Graph reset from backend source data.");
     } catch (resetError) {
       setError(resetError instanceof Error ? resetError.message : "Unable to reset graph");
@@ -97,6 +88,28 @@ export function Toolbar({ onGraphChanged, onShowFullGraph }: ToolbarProps) {
     }
   };
 
+  const handleShowClusters = async () => {
+    const response = await fetchClusters();
+    const clusterMap: Record<string, string> = {};
+    response.clusters.forEach((cluster, index) => {
+      const color = CLUSTER_COLORS[index % CLUSTER_COLORS.length];
+      cluster.node_ids.forEach((nodeId) => { clusterMap[nodeId] = color; });
+    });
+    onAnalyticsChange({ mode: "clusters", clusterMap }, `Showing ${response.clusters.length} graph clusters.`);
+  };
+
+  const handleShowImportance = async () => {
+    const response = await fetchImportance(30);
+    const importanceMap = Object.fromEntries(response.nodes.map((node) => [node.entity_id, node.importance_score]));
+    onAnalyticsChange({ mode: "importance", importanceMap }, "Scaled nodes by importance score.");
+  };
+
+  const handleShowBrokenFlows = async () => {
+    const response = await fetchBrokenFlows();
+    const brokenNodeIds = [...response.missing_delivery, ...response.missing_invoice, ...response.missing_payment];
+    onAnalyticsChange({ mode: "broken_flows", brokenNodeIds }, `Highlighted ${brokenNodeIds.length} orders with incomplete flows.`);
+  };
+
   return (
     <section className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
       <div className="mb-4">
@@ -109,6 +122,19 @@ export function Toolbar({ onGraphChanged, onShowFullGraph }: ToolbarProps) {
         <button className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50" onClick={() => setModalMode("edge")} type="button">Add Edge</button>
         <button className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-60" disabled={submitting} onClick={() => void handleReset()} type="button">Reset Graph</button>
         <button className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-60" disabled={submitting} onClick={() => void handleExport()} type="button">Export JSON</button>
+      </div>
+
+      <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-4">
+        <div className="mb-3">
+          <p className="text-xs uppercase tracking-[0.28em] text-slate-400">Analytics</p>
+          <h3 className="mt-1 text-sm font-semibold text-slate-900">Graph Analysis</h3>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <button className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 transition hover:bg-slate-50" onClick={() => void handleShowClusters()} type="button">Show Clusters</button>
+          <button className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 transition hover:bg-slate-50" onClick={() => void handleShowImportance()} type="button">Important Nodes</button>
+          <button className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 transition hover:bg-slate-50" onClick={() => void handleShowBrokenFlows()} type="button">Broken Flows</button>
+          <button className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 transition hover:bg-slate-50" onClick={() => onAnalyticsChange({ mode: "default" }, "Reset graph view to default styling.")} type="button">Reset View</button>
+        </div>
       </div>
 
       {error ? <div className="mt-4 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</div> : null}
@@ -124,9 +150,7 @@ export function Toolbar({ onGraphChanged, onShowFullGraph }: ToolbarProps) {
             <div className="space-y-3">
               <input className={inputClassName} onChange={(event) => setNodeForm((current) => ({ ...current, id: event.target.value }))} placeholder="Node ID" value={nodeForm.id} />
               <select className={inputClassName} onChange={(event) => setNodeForm((current) => ({ ...current, type: event.target.value }))} value={nodeForm.type}>
-                {["Order", "Delivery", "Invoice", "Payment", "Customer", "Product", "Address"].map((type) => (
-                  <option key={type} value={type}>{type}</option>
-                ))}
+                {["Order", "Delivery", "Invoice", "Payment", "Customer", "Product", "Address"].map((type) => <option key={type} value={type}>{type}</option>)}
               </select>
               <textarea className={`${inputClassName} min-h-32`} onChange={(event) => setNodeForm((current) => ({ ...current, metadata: event.target.value }))} value={nodeForm.metadata} />
               <button className="w-full rounded-xl bg-slate-950 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-800 disabled:opacity-60" disabled={submitting || !nodeForm.id.trim()} onClick={() => void handleAddNode()} type="button">{submitting ? "Saving..." : "Create Node"}</button>
@@ -136,9 +160,7 @@ export function Toolbar({ onGraphChanged, onShowFullGraph }: ToolbarProps) {
               <input className={inputClassName} onChange={(event) => setEdgeForm((current) => ({ ...current, source: event.target.value }))} placeholder="Source ID" value={edgeForm.source} />
               <input className={inputClassName} onChange={(event) => setEdgeForm((current) => ({ ...current, target: event.target.value }))} placeholder="Target ID" value={edgeForm.target} />
               <select className={inputClassName} onChange={(event) => setEdgeForm((current) => ({ ...current, relationship: event.target.value }))} value={edgeForm.relationship}>
-                {["order_to_delivery", "delivery_to_invoice", "invoice_to_payment", "order_to_customer", "order_to_product", "customer_to_address"].map((relationship) => (
-                  <option key={relationship} value={relationship}>{relationship}</option>
-                ))}
+                {["order_to_delivery", "delivery_to_invoice", "invoice_to_payment", "order_to_customer", "order_to_product", "customer_to_address"].map((relationship) => <option key={relationship} value={relationship}>{relationship}</option>)}
               </select>
               <button className="w-full rounded-xl bg-slate-950 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-800 disabled:opacity-60" disabled={submitting || !edgeForm.source.trim() || !edgeForm.target.trim()} onClick={() => void handleAddEdge()} type="button">{submitting ? "Saving..." : "Create Edge"}</button>
             </div>

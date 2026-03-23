@@ -4,11 +4,12 @@ import asyncio
 import logging
 import os
 from pathlib import Path
+from typing import AsyncIterator
 
 from dotenv import load_dotenv
 
 LOGGER = logging.getLogger(__name__)
-MODEL_NAME = "gemini-3.1-flash-lite-preview"
+MODEL_NAME = "gemini-2.0-flash-lite"
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 ENV_PATH = PROJECT_ROOT / ".env"
 
@@ -70,3 +71,50 @@ async def call_gemini(prompt: str, system_instruction: str) -> str:
             LOGGER.warning("Gemini call attempt %s failed: %s", attempt + 1, exc)
             await asyncio.sleep(1 + attempt)
     raise RuntimeError(f"Gemini call failed: {last_error}")
+
+
+async def stream_gemini(prompt: str, system_instruction: str) -> AsyncIterator[str]:
+    api_key = get_gemini_api_key()
+    if not api_key:
+        LOGGER.warning("No Gemini API key found, using mock mode")
+        raise RuntimeError("No Gemini API key found, using mock mode")
+    if genai is None or types is None:
+        raise RuntimeError("google-genai is not installed")
+
+    client = genai.Client(api_key=api_key)
+    loop = asyncio.get_running_loop()
+    queue: asyncio.Queue[str | None] = asyncio.Queue()
+
+    def _emit(value: str | None) -> None:
+        loop.call_soon_threadsafe(queue.put_nowait, value)
+
+    def _worker() -> None:
+        try:
+            stream = client.models.generate_content_stream(
+                model=MODEL_NAME,
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    system_instruction=system_instruction,
+                    temperature=0.1,
+                ),
+            )
+            for chunk in stream:
+                text = getattr(chunk, "text", None)
+                if text:
+                    _emit(str(text))
+        except Exception as exc:  # pragma: no cover - network dependent
+            LOGGER.warning("Gemini streaming call failed: %s", exc)
+        finally:
+            _emit(None)
+
+    worker = asyncio.create_task(asyncio.to_thread(_worker))
+    try:
+        while True:
+            chunk = await asyncio.wait_for(queue.get(), timeout=60)
+            if chunk is None:
+                break
+            if chunk:
+                yield chunk
+    finally:
+        if not worker.done():
+            worker.cancel()
