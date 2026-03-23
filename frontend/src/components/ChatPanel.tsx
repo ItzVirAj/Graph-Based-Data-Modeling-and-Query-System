@@ -5,6 +5,7 @@ import type { ChatMessage } from "../types/api";
 
 interface ChatPanelProps {
   highlightedNodes: string[];
+  onFocusNode: (nodeId: string | null) => void;
   onHighlightNodes: (nodeIds: string[]) => void;
 }
 
@@ -12,14 +13,72 @@ function createMessageId() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-export function ChatPanel({ highlightedNodes, onHighlightNodes }: ChatPanelProps) {
-  const [isCollapsed, setIsCollapsed] = useState(false);
+function pickPrimaryNodeId(question: string, rawData: unknown, relevantNodeIds: string[] | undefined): string | null {
+  const normalizedRelevant = (relevantNodeIds ?? []).filter(Boolean);
+  const idsInQuestion: string[] = question.match(/[A-Za-z]?\d{6,10}/g) ?? [];
+
+  for (const candidate of idsInQuestion) {
+    const exactMatch = normalizedRelevant.find((value) => value === candidate || value.endsWith(`:${candidate}`));
+    if (exactMatch) {
+      return exactMatch;
+    }
+  }
+
+  const records =
+    rawData && typeof rawData === "object" && "records" in rawData && Array.isArray((rawData as { records?: unknown[] }).records)
+      ? (rawData as { records: unknown[] }).records
+      : [];
+
+  const firstRecord = records[0];
+  if (firstRecord && typeof firstRecord === "object") {
+    const candidate = firstRecord as Record<string, unknown>;
+    if (typeof candidate.entity_id === "string") {
+      return candidate.entity_id;
+    }
+    if (typeof candidate.node_id === "string") {
+      return candidate.node_id;
+    }
+    if (Array.isArray(candidate.chain) && candidate.chain.length > 0) {
+      const matchingChainNode = candidate.chain.find((item) => {
+        if (!item || typeof item !== "object") {
+          return false;
+        }
+        const chainCandidate = item as Record<string, unknown>;
+        const entityId = chainCandidate.entity_id;
+        return typeof entityId === "string" && idsInQuestion.includes(entityId);
+      });
+      if (matchingChainNode && typeof matchingChainNode === "object") {
+        const chainCandidate = matchingChainNode as Record<string, unknown>;
+        if (typeof chainCandidate.entity_id === "string") {
+          return chainCandidate.entity_id;
+        }
+        if (typeof chainCandidate.node_id === "string") {
+          return chainCandidate.node_id;
+        }
+      }
+      const firstChainNode = candidate.chain[0];
+      if (firstChainNode && typeof firstChainNode === "object") {
+        const chainCandidate = firstChainNode as Record<string, unknown>;
+        if (typeof chainCandidate.entity_id === "string") {
+          return chainCandidate.entity_id;
+        }
+        if (typeof chainCandidate.node_id === "string") {
+          return chainCandidate.node_id;
+        }
+      }
+    }
+  }
+
+  return normalizedRelevant[0] ?? null;
+}
+
+export function ChatPanel({ highlightedNodes, onFocusNode, onHighlightNodes }: ChatPanelProps) {
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       id: createMessageId(),
       role: "assistant",
-      text: "Ask about order flows, invoices, payments, customers, products, or addresses to explore the graph with natural language.",
+      text: "Hi! I can help you analyze the Order to Cash process.",
     },
   ]);
   const [isThinking, setIsThinking] = useState(false);
@@ -27,7 +86,7 @@ export function ChatPanel({ highlightedNodes, onHighlightNodes }: ChatPanelProps
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
-        setIsCollapsed(true);
+        setInput("");
       }
     };
 
@@ -65,7 +124,10 @@ export function ChatPanel({ highlightedNodes, onHighlightNodes }: ChatPanelProps
         rejected,
       };
       setMessages((current) => [...current, assistantMessage]);
-      onHighlightNodes(response.relevant_node_ids ?? []);
+
+      const primaryNodeId = pickPrimaryNodeId(question, response.raw_data, response.relevant_node_ids);
+      onFocusNode(primaryNodeId);
+      onHighlightNodes(primaryNodeId ? [primaryNodeId] : []);
     } catch (error) {
       const message: ChatMessage = {
         id: createMessageId(),
@@ -73,6 +135,7 @@ export function ChatPanel({ highlightedNodes, onHighlightNodes }: ChatPanelProps
         text: error instanceof Error ? error.message : "Query failed. Please try again.",
       };
       setMessages((current) => [...current, message]);
+      onFocusNode(null);
       onHighlightNodes([]);
     } finally {
       setIsThinking(false);
@@ -80,111 +143,78 @@ export function ChatPanel({ highlightedNodes, onHighlightNodes }: ChatPanelProps
   };
 
   return (
-    <aside
-      className={`border-t border-slate-800 bg-slate-900/95 backdrop-blur lg:border-l lg:border-t-0 ${
-        isCollapsed ? "w-full lg:w-[88px]" : "w-full lg:w-[430px]"
-      } transition-all duration-300`}
-    >
-      <div className="flex h-full min-h-[360px] flex-col">
-        <div className="flex items-center justify-between border-b border-slate-800 px-4 py-4">
-          {!isCollapsed ? (
-            <div>
-              <p className="text-xs uppercase tracking-[0.28em] text-cyan-400">Query Copilot</p>
-              <h2 className="mt-1 text-lg font-semibold text-white">Natural Language Chat</h2>
-            </div>
-          ) : (
-            <div className="text-xs uppercase tracking-[0.28em] text-cyan-400 [writing-mode:vertical-rl]">
-              Chat
-            </div>
-          )}
-          <button
-            className="rounded-xl border border-slate-700 px-3 py-2 text-sm text-slate-300 transition hover:border-slate-500 hover:text-white"
-            onClick={() => setIsCollapsed((current) => !current)}
-            type="button"
-          >
-            {isCollapsed ? "Open" : "Collapse"}
-          </button>
+    <aside className="ml-4 flex w-[430px] shrink-0 overflow-hidden rounded-[22px] border border-slate-200 bg-white shadow-sm">
+      <div className="flex h-full min-h-0 w-full flex-col">
+        <div className="border-b border-slate-200 px-5 py-4">
+          <h2 className="text-[18px] font-semibold text-slate-950">Chat with Graph</h2>
+          <p className="mt-1 text-sm text-slate-500">Order to Cash</p>
         </div>
 
-        {!isCollapsed ? (
-          <>
-            <div className="border-b border-slate-800 px-4 py-3 text-xs text-slate-400">
-              {activeHighlightCount > 0
-                ? `${activeHighlightCount} graph node(s) highlighted from the latest answer.`
-                : "No active graph highlights."}
+        <div className="border-b border-slate-100 px-5 py-5">
+          <div className="flex items-start gap-4">
+            <div className="flex size-12 shrink-0 items-center justify-center rounded-full bg-slate-950 text-lg font-semibold text-white">
+              D
             </div>
+            <div>
+              <h3 className="text-[18px] font-semibold text-slate-950">Dodge AI</h3>
+              <p className="text-sm text-slate-500">Graph Agent</p>
+            </div>
+          </div>
+        </div>
 
-            <div className="flex-1 space-y-4 overflow-auto px-4 py-4 scrollbar-thin">
-              {messages.map((message) => (
-                <div
-                  key={message.id}
-                  className={`max-w-[92%] rounded-2xl px-4 py-3 text-sm leading-6 ${
-                    message.role === "user"
-                      ? "ml-auto bg-cyan-500 text-slate-950"
-                      : message.rejected
-                        ? "bg-amber-500/15 text-amber-100 ring-1 ring-amber-400/30"
-                        : "bg-slate-800 text-slate-100"
-                  }`}
-                >
-                  <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.22em] opacity-70">
-                    {message.role === "user" ? "You" : "Assistant"}
-                  </div>
-                  <div>{message.text}</div>
-                  {message.relevantNodeIds && message.relevantNodeIds.length > 0 ? (
-                    <div className="mt-3 rounded-xl bg-slate-950/30 px-3 py-2 text-xs text-slate-200">
-                      Highlighted nodes: {message.relevantNodeIds.slice(0, 8).join(", ")}
-                      {message.relevantNodeIds.length > 8 ? " ..." : ""}
-                    </div>
-                  ) : null}
-                </div>
-              ))}
-              {isThinking ? (
-                <div className="max-w-[92%] rounded-2xl bg-slate-800 px-4 py-3 text-sm text-slate-300">
-                  <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.22em] opacity-70">
-                    Assistant
-                  </div>
-                  Thinking through the graph...
+        <div className="flex-1 space-y-4 overflow-auto px-5 py-5">
+          {messages.map((message) => (
+            <div key={message.id} className="space-y-2">
+              <div className={`text-[15px] leading-8 ${message.rejected ? "text-amber-700" : "text-slate-900"}`}>
+                {message.text}
+              </div>
+              {message.relevantNodeIds && message.relevantNodeIds.length > 0 ? (
+                <div className="text-xs text-slate-500">
+                  Focused graph on the matched result node.
                 </div>
               ) : null}
             </div>
+          ))}
+          {isThinking ? <div className="text-[15px] text-slate-500">Thinking through the graph...</div> : null}
+        </div>
 
-            <div className="border-t border-slate-800 p-4">
-              <div className="rounded-2xl border border-slate-700 bg-slate-950/80 p-3 shadow-lg shadow-slate-950/30">
-                <textarea
-                  className="min-h-28 w-full resize-none border-0 bg-transparent text-sm text-white outline-none placeholder:text-slate-500"
-                  onChange={(event) => setInput(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter" && !event.shiftKey) {
-                      event.preventDefault();
-                      void handleSend();
-                    }
-                    if (event.key === "Escape") {
-                      setIsCollapsed(true);
-                    }
-                  }}
-                  placeholder="Ask which invoices connect to a payment, trace a billing flow, or find orders for a customer..."
-                  value={input}
-                />
-                <div className="mt-3 flex items-center justify-between gap-4">
-                  <p className="text-xs text-slate-500">Press Enter to send, Shift+Enter for newline.</p>
-                  <button
-                    className="rounded-xl bg-cyan-500 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-cyan-400 disabled:opacity-60"
-                    disabled={isThinking || !input.trim()}
-                    onClick={() => void handleSend()}
-                    type="button"
-                  >
-                    Send
-                  </button>
-                </div>
-              </div>
-            </div>
-          </>
-        ) : (
-          <div className="flex flex-1 items-center justify-center px-3 text-center text-xs text-slate-500">
-            Natural language query panel. Press Escape to close.
+        <div className="border-t border-slate-200 p-5">
+          <div className="mb-3 flex items-center gap-2 rounded-full border border-emerald-100 bg-emerald-50 px-4 py-2 text-sm text-emerald-700">
+            <span className="size-2 rounded-full bg-emerald-500" />
+            Dodge AI is awaiting instructions
+            <span className="ml-auto text-slate-400">{activeHighlightCount > 0 ? `${activeHighlightCount} focused` : "Ready"}</span>
           </div>
-        )}
+          <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+            <textarea
+              className="h-28 w-full resize-none border-0 bg-transparent text-[15px] text-slate-900 outline-none placeholder:text-slate-400"
+              onChange={(event) => setInput(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" && !event.shiftKey) {
+                  event.preventDefault();
+                  void handleSend();
+                }
+                if (event.key === "Escape") {
+                  setInput("");
+                }
+              }}
+              placeholder="Analyze anything"
+              value={input}
+            />
+            <div className="mt-4 flex items-center justify-end">
+              <button
+                className="rounded-2xl bg-slate-500 px-6 py-3 text-sm font-medium text-white transition hover:bg-slate-600 disabled:opacity-60"
+                disabled={isThinking || !input.trim()}
+                onClick={() => void handleSend()}
+                type="button"
+              >
+                Send
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
     </aside>
   );
 }
+
+

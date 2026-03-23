@@ -10,7 +10,7 @@ interface ToolbarProps {
 type ModalMode = "node" | "edge" | null;
 
 const inputClassName =
-  "w-full rounded-xl border border-slate-700 bg-slate-950/80 px-3 py-2 text-sm text-white outline-none transition focus:border-cyan-400 focus:ring-2 focus:ring-cyan-400/20";
+  "w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-100";
 
 export function Toolbar({ onGraphChanged, onShowFullGraph }: ToolbarProps) {
   const [modalMode, setModalMode] = useState<ModalMode>(null);
@@ -98,139 +98,49 @@ export function Toolbar({ onGraphChanged, onShowFullGraph }: ToolbarProps) {
   };
 
   return (
-    <section className="rounded-2xl border border-slate-800 bg-slate-900 p-4 shadow-2xl shadow-slate-950/30">
+    <section className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
       <div className="mb-4">
-        <p className="text-xs uppercase tracking-[0.28em] text-slate-500">Controls</p>
-        <h2 className="mt-1 text-lg font-semibold text-white">Graph Toolbar</h2>
+        <p className="text-xs uppercase tracking-[0.28em] text-slate-400">Controls</p>
+        <h2 className="mt-1 text-lg font-semibold text-slate-950">Graph Toolbar</h2>
       </div>
 
       <div className="grid grid-cols-2 gap-3">
-        <button
-          className="rounded-xl bg-cyan-500 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-cyan-400"
-          onClick={() => setModalMode("node")}
-          type="button"
-        >
-          Add Node
-        </button>
-        <button
-          className="rounded-xl bg-slate-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-600"
-          onClick={() => setModalMode("edge")}
-          type="button"
-        >
-          Add Edge
-        </button>
-        <button
-          className="rounded-xl bg-amber-500 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-amber-400 disabled:opacity-60"
-          disabled={submitting}
-          onClick={() => void handleReset()}
-          type="button"
-        >
-          Reset Graph
-        </button>
-        <button
-          className="rounded-xl bg-emerald-500 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-emerald-400 disabled:opacity-60"
-          disabled={submitting}
-          onClick={() => void handleExport()}
-          type="button"
-        >
-          Export JSON
-        </button>
+        <button className="rounded-xl bg-slate-950 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-800" onClick={() => setModalMode("node")} type="button">Add Node</button>
+        <button className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50" onClick={() => setModalMode("edge")} type="button">Add Edge</button>
+        <button className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-60" disabled={submitting} onClick={() => void handleReset()} type="button">Reset Graph</button>
+        <button className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-60" disabled={submitting} onClick={() => void handleExport()} type="button">Export JSON</button>
       </div>
 
-      {error ? (
-        <div className="mt-4 rounded-xl border border-rose-500/40 bg-rose-950/70 px-3 py-2 text-sm text-rose-200">
-          {error}
-        </div>
-      ) : null}
+      {error ? <div className="mt-4 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</div> : null}
 
       {modalMode ? (
-        <div className="mt-4 rounded-2xl border border-slate-800 bg-slate-950/90 p-4">
+        <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-4">
           <div className="mb-3 flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-white">
-              {modalMode === "node" ? "Create Node" : "Create Edge"}
-            </h3>
-            <button
-              className="text-sm text-slate-400 transition hover:text-white"
-              onClick={closeModal}
-              type="button"
-            >
-              Close
-            </button>
+            <h3 className="text-sm font-semibold text-slate-900">{modalMode === "node" ? "Create Node" : "Create Edge"}</h3>
+            <button className="text-sm text-slate-500 transition hover:text-slate-900" onClick={closeModal} type="button">Close</button>
           </div>
 
           {modalMode === "node" ? (
             <div className="space-y-3">
-              <input
-                className={inputClassName}
-                onChange={(event) => setNodeForm((current) => ({ ...current, id: event.target.value }))}
-                placeholder="Node ID"
-                value={nodeForm.id}
-              />
-              <select
-                className={inputClassName}
-                onChange={(event) => setNodeForm((current) => ({ ...current, type: event.target.value }))}
-                value={nodeForm.type}
-              >
+              <input className={inputClassName} onChange={(event) => setNodeForm((current) => ({ ...current, id: event.target.value }))} placeholder="Node ID" value={nodeForm.id} />
+              <select className={inputClassName} onChange={(event) => setNodeForm((current) => ({ ...current, type: event.target.value }))} value={nodeForm.type}>
                 {["Order", "Delivery", "Invoice", "Payment", "Customer", "Product", "Address"].map((type) => (
-                  <option key={type} value={type}>
-                    {type}
-                  </option>
+                  <option key={type} value={type}>{type}</option>
                 ))}
               </select>
-              <textarea
-                className={`${inputClassName} min-h-32`}
-                onChange={(event) => setNodeForm((current) => ({ ...current, metadata: event.target.value }))}
-                value={nodeForm.metadata}
-              />
-              <button
-                className="w-full rounded-xl bg-cyan-500 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-cyan-400 disabled:opacity-60"
-                disabled={submitting || !nodeForm.id.trim()}
-                onClick={() => void handleAddNode()}
-                type="button"
-              >
-                {submitting ? "Saving..." : "Create Node"}
-              </button>
+              <textarea className={`${inputClassName} min-h-32`} onChange={(event) => setNodeForm((current) => ({ ...current, metadata: event.target.value }))} value={nodeForm.metadata} />
+              <button className="w-full rounded-xl bg-slate-950 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-800 disabled:opacity-60" disabled={submitting || !nodeForm.id.trim()} onClick={() => void handleAddNode()} type="button">{submitting ? "Saving..." : "Create Node"}</button>
             </div>
           ) : (
             <div className="space-y-3">
-              <input
-                className={inputClassName}
-                onChange={(event) => setEdgeForm((current) => ({ ...current, source: event.target.value }))}
-                placeholder="Source ID"
-                value={edgeForm.source}
-              />
-              <input
-                className={inputClassName}
-                onChange={(event) => setEdgeForm((current) => ({ ...current, target: event.target.value }))}
-                placeholder="Target ID"
-                value={edgeForm.target}
-              />
-              <select
-                className={inputClassName}
-                onChange={(event) => setEdgeForm((current) => ({ ...current, relationship: event.target.value }))}
-                value={edgeForm.relationship}
-              >
-                {[
-                  "order_to_delivery",
-                  "delivery_to_invoice",
-                  "invoice_to_payment",
-                  "order_to_customer",
-                  "order_to_product",
-                  "customer_to_address",
-                ].map((relationship) => (
-                  <option key={relationship} value={relationship}>
-                    {relationship}
-                  </option>
+              <input className={inputClassName} onChange={(event) => setEdgeForm((current) => ({ ...current, source: event.target.value }))} placeholder="Source ID" value={edgeForm.source} />
+              <input className={inputClassName} onChange={(event) => setEdgeForm((current) => ({ ...current, target: event.target.value }))} placeholder="Target ID" value={edgeForm.target} />
+              <select className={inputClassName} onChange={(event) => setEdgeForm((current) => ({ ...current, relationship: event.target.value }))} value={edgeForm.relationship}>
+                {["order_to_delivery", "delivery_to_invoice", "invoice_to_payment", "order_to_customer", "order_to_product", "customer_to_address"].map((relationship) => (
+                  <option key={relationship} value={relationship}>{relationship}</option>
                 ))}
               </select>
-              <button
-                className="w-full rounded-xl bg-cyan-500 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-cyan-400 disabled:opacity-60"
-                disabled={submitting || !edgeForm.source.trim() || !edgeForm.target.trim()}
-                onClick={() => void handleAddEdge()}
-                type="button"
-              >
-                {submitting ? "Saving..." : "Create Edge"}
-              </button>
+              <button className="w-full rounded-xl bg-slate-950 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-800 disabled:opacity-60" disabled={submitting || !edgeForm.source.trim() || !edgeForm.target.trim()} onClick={() => void handleAddEdge()} type="button">{submitting ? "Saving..." : "Create Edge"}</button>
             </div>
           )}
         </div>

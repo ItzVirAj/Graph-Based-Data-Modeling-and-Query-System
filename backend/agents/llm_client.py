@@ -5,9 +5,12 @@ import logging
 import os
 from pathlib import Path
 
+from dotenv import load_dotenv
+
 LOGGER = logging.getLogger(__name__)
 MODEL_NAME = "gemini-3.1-flash-lite-preview"
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
+ENV_PATH = PROJECT_ROOT / ".env"
 
 try:
     from google import genai
@@ -18,15 +21,8 @@ except ImportError:  # pragma: no cover - optional dependency in mock mode
 
 
 def _load_env() -> None:
-    env_path = PROJECT_ROOT / ".env"
-    if not env_path.exists():
-        return
-    for line in env_path.read_text(encoding="utf-8").splitlines():
-        stripped = line.strip()
-        if not stripped or stripped.startswith("#") or "=" not in stripped:
-            continue
-        key, value = stripped.split("=", 1)
-        os.environ.setdefault(key.strip(), value.strip())
+    if ENV_PATH.exists():
+        load_dotenv(ENV_PATH, override=True)
 
 
 def get_gemini_api_key() -> str:

@@ -1,13 +1,16 @@
 @import "tailwindcss";
 
 :root {
-  color-scheme: dark;
+  color-scheme: light;
   font-family:
     "IBM Plex Sans",
     "Segoe UI",
     sans-serif;
-  background-color: #020617;
-  color: #e2e8f0;
+  background-color: #f7f7f5;
+  color: #0f172a;
+  --scrollbar-track: rgba(226, 232, 240, 0.72);
+  --scrollbar-thumb: rgba(148, 163, 184, 0.9);
+  --scrollbar-thumb-hover: rgba(100, 116, 139, 0.95);
 }
 
 html,
@@ -19,13 +22,37 @@ body,
 
 body {
   min-height: 100vh;
-  background:
-    radial-gradient(circle at top, rgba(34, 211, 238, 0.08), transparent 26%),
-    linear-gradient(180deg, #0f172a 0%, #020617 100%);
+  background: #f7f7f5;
 }
 
 * {
   box-sizing: border-box;
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-track {
+  background: var(--scrollbar-track);
+  border-radius: 999px;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, var(--scrollbar-thumb) 0%, #cbd5e1 100%);
+  border: 2px solid rgba(255, 255, 255, 0.85);
+  border-radius: 999px;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, var(--scrollbar-thumb-hover) 0%, #94a3b8 100%);
+}
+
+*::-webkit-scrollbar-corner {
+  background: transparent;
 }
 
 button,
