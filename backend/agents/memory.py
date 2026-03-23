@@ -11,7 +11,9 @@ ENTITY_PATTERNS = {
     "Delivery": re.compile(r"\b80\d{6}\b"),
     "Invoice": re.compile(r"\b(?:90|91)\d{6}\b"),
     "Payment": re.compile(r"\b94\d{8}\b"),
+    "JournalEntry": re.compile(r"\b94\d{7,8}\b"),
     "Customer": re.compile(r"\b32\d{7}\b"),
+    "Plant": re.compile(r"\b(?:\d{4}|[A-Z]{2}\d{2})\b"),
 }
 
 
@@ -29,8 +31,7 @@ class ConversationMemory:
     turns: deque[ConversationTurn] = field(default_factory=deque)
 
     def add_turn(self, role: str, content: str, query: dict[str, Any] | None = None) -> None:
-        timestamp = datetime.now(timezone.utc).isoformat()
-        self.turns.append(ConversationTurn(role=role, content=content, timestamp=timestamp, query_generated=query))
+        self.turns.append(ConversationTurn(role=role, content=content, timestamp=datetime.now(timezone.utc).isoformat(), query_generated=query))
         while len(self.turns) > self.max_turns:
             self.turns.popleft()
 
@@ -51,30 +52,16 @@ class ConversationMemory:
             for entity_type, pattern in ENTITY_PATTERNS.items():
                 for match in pattern.findall(turn.content):
                     key = (entity_type, match)
-                    if key in seen:
-                        continue
-                    seen.add(key)
-                    found.append({"entity_type": entity_type, "entity_id": match})
+                    if key not in seen:
+                        seen.add(key)
+                        found.append({"entity_type": entity_type, "entity_id": match})
         return found
 
     def clear(self) -> None:
         self.turns.clear()
 
     def to_dict(self) -> dict[str, Any]:
-        return {
-            "max_turns": self.max_turns,
-            "turn_count": len(self.turns),
-            "turns": [
-                {
-                    "role": turn.role,
-                    "content": turn.content,
-                    "timestamp": turn.timestamp,
-                    "query_generated": turn.query_generated,
-                }
-                for turn in self.turns
-            ],
-            "last_entities": self.get_last_entities(),
-        }
+        return {"max_turns": self.max_turns, "turn_count": len(self.turns), "turns": [{"role": turn.role, "content": turn.content, "timestamp": turn.timestamp, "query_generated": turn.query_generated} for turn in self.turns], "last_entities": self.get_last_entities()}
 
 
 sessions: dict[str, ConversationMemory] = {}

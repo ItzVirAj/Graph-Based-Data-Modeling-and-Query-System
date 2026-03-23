@@ -106,7 +106,7 @@ export function Toolbar({ onAnalyticsChange, onGraphChanged, onShowFullGraph }: 
 
   const handleShowBrokenFlows = async () => {
     const response = await fetchBrokenFlows();
-    const brokenNodeIds = [...response.missing_delivery, ...response.missing_invoice, ...response.missing_payment];
+    const brokenNodeIds = [...response.missing_delivery, ...response.missing_invoice, ...response.missing_payment, ...response.billed_without_delivery];
     onAnalyticsChange({ mode: "broken_flows", brokenNodeIds }, `Highlighted ${brokenNodeIds.length} orders with incomplete flows.`);
   };
 
@@ -150,7 +150,7 @@ export function Toolbar({ onAnalyticsChange, onGraphChanged, onShowFullGraph }: 
             <div className="space-y-3">
               <input className={inputClassName} onChange={(event) => setNodeForm((current) => ({ ...current, id: event.target.value }))} placeholder="Node ID" value={nodeForm.id} />
               <select className={inputClassName} onChange={(event) => setNodeForm((current) => ({ ...current, type: event.target.value }))} value={nodeForm.type}>
-                {["Order", "Delivery", "Invoice", "Payment", "Customer", "Product", "Address"].map((type) => <option key={type} value={type}>{type}</option>)}
+                {["Order", "Delivery", "Invoice", "Payment", "Customer", "Product", "Address", "Plant", "JournalEntry"].map((type) => <option key={type} value={type}>{type}</option>)}
               </select>
               <textarea className={`${inputClassName} min-h-32`} onChange={(event) => setNodeForm((current) => ({ ...current, metadata: event.target.value }))} value={nodeForm.metadata} />
               <button className="w-full rounded-xl bg-slate-950 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-800 disabled:opacity-60" disabled={submitting || !nodeForm.id.trim()} onClick={() => void handleAddNode()} type="button">{submitting ? "Saving..." : "Create Node"}</button>
@@ -160,7 +160,7 @@ export function Toolbar({ onAnalyticsChange, onGraphChanged, onShowFullGraph }: 
               <input className={inputClassName} onChange={(event) => setEdgeForm((current) => ({ ...current, source: event.target.value }))} placeholder="Source ID" value={edgeForm.source} />
               <input className={inputClassName} onChange={(event) => setEdgeForm((current) => ({ ...current, target: event.target.value }))} placeholder="Target ID" value={edgeForm.target} />
               <select className={inputClassName} onChange={(event) => setEdgeForm((current) => ({ ...current, relationship: event.target.value }))} value={edgeForm.relationship}>
-                {["order_to_delivery", "delivery_to_invoice", "invoice_to_payment", "order_to_customer", "order_to_product", "customer_to_address"].map((relationship) => <option key={relationship} value={relationship}>{relationship}</option>)}
+                {["order_to_delivery", "delivery_to_invoice", "invoice_to_payment", "invoice_to_journal_entry", "order_to_customer", "order_to_product", "delivery_to_product", "customer_to_address", "customer_to_delivery", "delivery_to_plant", "product_to_plant"].map((relationship) => <option key={relationship} value={relationship}>{relationship}</option>)}
               </select>
               <button className="w-full rounded-xl bg-slate-950 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-800 disabled:opacity-60" disabled={submitting || !edgeForm.source.trim() || !edgeForm.target.trim()} onClick={() => void handleAddEdge()} type="button">{submitting ? "Saving..." : "Create Edge"}</button>
             </div>
@@ -170,3 +170,5 @@ export function Toolbar({ onAnalyticsChange, onGraphChanged, onShowFullGraph }: 
     </section>
   );
 }
+
+

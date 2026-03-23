@@ -2,32 +2,25 @@
 
 Use these prompts in the chat panel or against `POST /api/query`.
 
-## Core graph exploration
+1. Which products are associated with the highest number of billing documents?
+2. Trace the full flow of billing document 90504204
+3. Find sales orders with broken or incomplete flows
+4. Show me all orders for customer 320000083
+5. What invoices are linked to delivery 80738040?
+6. Total payment amount for order 740509
+7. Which products were in the most orders?
+8. Show the full chain from order 740509 to payment
+9. What payments are connected to invoice 90504204?
+10. Show deliveries for customer 320000083
+11. Which of these were delivered?
+12. What about their invoices?
+13. Find the plant linked to delivery 80738076
+14. Show journal entries linked to invoice 90504204
+15. What is an order?
+16. Define delivery
+17. What is the capital of France?
 
-1. Show me all orders for customer 320000083
-2. What invoices are linked to delivery 80738040?
-3. Total payment amount for order 740509
-4. Which products were in the most orders?
-5. Show the full chain from order 740509 to payment
-6. List all overdue invoices
-7. Count all deliveries connected to invoice 90504204
-8. Show all products linked to order 740509
-9. Which customers have the most invoices?
-10. Find the address connected to customer 320000083
-11. Trace invoice 90504204 flow
-12. Show payments linked to invoice 90504204
-13. Count all orders in the graph
-14. Show deliveries for customer 320000083
-15. Find node 80738040
+Expected behavior:
 
-## Guardrail rejection example
-
-16. What is the capital of France?
-
-Expected behavior: the system should reject this question because it is not related to the SAP O2C dataset.
-
-## Notes
-
-- If `GEMINI_API_KEY` is not configured, the backend will answer in mock mode.
-- IDs can be asked directly when known, for example `order 740509` or `invoice 90504204`.
-- Questions outside orders, deliveries, invoices, payments, customers, products, and addresses should be rejected.
+- The first 14 should pass and query the SAP O2C dataset.
+- `What is the capital of France?` should be rejected by the guardrail.

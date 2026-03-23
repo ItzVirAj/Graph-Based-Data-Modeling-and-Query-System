@@ -23,6 +23,8 @@ class GraphBuilder:
             self._add_entity_node("customer", customer)
         for address in self.data.addresses:
             self._add_entity_node("address", address)
+        for plant in self.data.plants:
+            self._add_entity_node("plant", plant)
         for product in self.data.products:
             self._add_entity_node("product", product)
         for order in self.data.orders:
@@ -31,6 +33,8 @@ class GraphBuilder:
             self._add_entity_node("delivery", delivery)
         for invoice in self.data.invoices:
             self._add_entity_node("invoice", invoice)
+        for journal_entry in self.data.journal_entries:
+            self._add_entity_node("journal_entry", journal_entry)
         for payment in self.data.payments:
             self._add_entity_node("payment", payment)
 
@@ -45,21 +49,39 @@ class GraphBuilder:
             customer_key = self._node_key("customer", customer.id)
             for address_id in customer.address_ids:
                 self._add_edge(customer_key, self._node_key("address", address_id), "customer_to_address")
+            for delivery_id in customer.delivery_ids:
+                self._add_edge(customer_key, self._node_key("delivery", delivery_id), "customer_to_delivery")
+
+        for plant in self.data.plants:
+            plant_key = self._node_key("plant", plant.id)
+            for product_id in plant.product_ids:
+                self._add_edge(self._node_key("product", product_id), plant_key, "product_to_plant")
+            for delivery_id in plant.delivery_ids:
+                self._add_edge(self._node_key("delivery", delivery_id), plant_key, "delivery_to_plant")
 
         for delivery in self.data.deliveries:
             delivery_key = self._node_key("delivery", delivery.id)
             for order_id in delivery.order_ids:
                 self._add_edge(self._node_key("order", order_id), delivery_key, "order_to_delivery")
+            for product_id in delivery.product_ids:
+                self._add_edge(delivery_key, self._node_key("product", product_id), "delivery_to_product")
+            for plant_id in delivery.plant_ids:
+                self._add_edge(delivery_key, self._node_key("plant", plant_id), "delivery_to_plant")
 
         for invoice in self.data.invoices:
             invoice_key = self._node_key("invoice", invoice.id)
             for delivery_id in invoice.delivery_ids:
                 self._add_edge(self._node_key("delivery", delivery_id), invoice_key, "delivery_to_invoice")
+            for journal_entry_id in invoice.journal_entry_ids:
+                self._add_edge(invoice_key, self._node_key("journal_entry", journal_entry_id), "invoice_to_journal_entry")
 
         for payment in self.data.payments:
             payment_key = self._node_key("payment", payment.id)
             for invoice_id in payment.invoice_ids:
                 self._add_edge(self._node_key("invoice", invoice_id), payment_key, "invoice_to_payment")
+
+        # The provided SAP dataset contains Sales Orders and order items, not Purchase Orders.
+        # Order -> Product captures the available SalesOrderItem -> Material relationship.
 
     def _add_entity_node(self, entity_type: str, entity: Any) -> None:
         self.add_node(entity.id, entity_type, entity.model_dump(mode="json"))
@@ -68,15 +90,7 @@ class GraphBuilder:
         if not self.graph.has_node(source) or not self.graph.has_node(target):
             return
         edge_id = f"{edge_type}:{source}:{target}:{self.graph.number_of_edges(source, target)}"
-        self.graph.add_edge(
-            source,
-            target,
-            key=edge_id,
-            edge_type=edge_type,
-            relationship=edge_type,
-            source=source,
-            target=target,
-        )
+        self.graph.add_edge(source, target, key=edge_id, edge_type=edge_type, relationship=edge_type, source=source, target=target)
 
     def _resolve_node_key(self, node_id: str, entity_type: str | None = None) -> str | None:
         if entity_type:
@@ -85,12 +99,7 @@ class GraphBuilder:
                 return node_key
         if self.graph.has_node(node_id):
             return node_id
-
-        matches = [
-            candidate
-            for candidate, attrs in self.graph.nodes(data=True)
-            if attrs.get("entity_id") == node_id and (entity_type is None or attrs.get("entity_type") == entity_type.lower())
-        ]
+        matches = [candidate for candidate, attrs in self.graph.nodes(data=True) if attrs.get("entity_id") == node_id and (entity_type is None or attrs.get("entity_type") == entity_type.lower())]
         if len(matches) == 1:
             return matches[0]
         return None
@@ -102,7 +111,7 @@ class GraphBuilder:
         payload.setdefault("id", entity_id)
         payload["entity_type"] = normalized_type
         payload["entity_id"] = entity_id
-        payload.setdefault("label", entity_id)
+        payload.setdefault("label", payload.get("name") or entity_id)
         self.graph.add_node(node_key, **payload)
         return dict(self.graph.nodes[node_key])
 
@@ -127,7 +136,6 @@ class GraphBuilder:
         node_key = self._resolve_node_key(node_id)
         if node_key is None:
             return []
-
         neighbors = set(self.graph.successors(node_key)) | set(self.graph.predecessors(node_key))
         results = []
         for neighbor_key in sorted(neighbors):
@@ -140,24 +148,14 @@ class GraphBuilder:
         node_key = self._resolve_node_key(node_id)
         if node_key is None:
             return nx.MultiDiGraph()
-
         undirected = self.graph.to_undirected()
         lengths = nx.single_source_shortest_path_length(undirected, node_key, cutoff=max(depth, 0))
         return self.graph.subgraph(lengths.keys()).copy()
 
     def serialize_graph(self, graph: nx.MultiDiGraph | None = None) -> dict[str, list[dict[str, Any]]]:
         target_graph = graph or self.graph
-        nodes = []
-        edges = []
-
-        for node_key, attrs in target_graph.nodes(data=True):
-            node_data = {**attrs, "id": node_key, "node_key": node_key}
-            nodes.append({"data": node_data})
-
-        for source, target, key, attrs in target_graph.edges(keys=True, data=True):
-            edge_data = {"id": key, "source": source, "target": target, **attrs}
-            edges.append({"data": edge_data})
-
+        nodes = [{"data": {**attrs, "id": node_key, "node_key": node_key}} for node_key, attrs in target_graph.nodes(data=True)]
+        edges = [{"data": {"id": key, "source": source, "target": target, **attrs}} for source, target, key, attrs in target_graph.edges(keys=True, data=True)]
         return {"nodes": nodes, "edges": edges}
 
     def to_json(self) -> dict[str, list[dict[str, Any]]]:
@@ -166,9 +164,4 @@ class GraphBuilder:
     def get_stats(self) -> dict[str, Any]:
         node_counts = Counter(attrs.get("entity_type", "unknown") for _, attrs in self.graph.nodes(data=True))
         edge_counts = Counter(attrs.get("edge_type", "unknown") for *_, attrs in self.graph.edges(data=True))
-        return {
-            "total_nodes": self.graph.number_of_nodes(),
-            "total_edges": self.graph.number_of_edges(),
-            "nodes_by_type": dict(sorted(node_counts.items())),
-            "edges_by_type": dict(sorted(edge_counts.items())),
-        }
+        return {"total_nodes": self.graph.number_of_nodes(), "total_edges": self.graph.number_of_edges(), "nodes_by_type": dict(sorted(node_counts.items())), "edges_by_type": dict(sorted(edge_counts.items()))}

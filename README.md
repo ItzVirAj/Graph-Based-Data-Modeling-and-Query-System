@@ -5,14 +5,10 @@ A full-stack graph exploration system for SAP Order-to-Cash data. The backend in
 ## What This Project Does
 
 - Loads SAP O2C datasets from `sap-o2c-data`
-- Normalizes Orders, Deliveries, Invoices, Payments, Customers, Products, and Addresses
+- Normalizes Orders, Deliveries, Invoices, Payments, Customers, Products, Addresses, Plants, and Journal Entries
 - Builds a typed relationship graph in NetworkX
 - Loads normalized entities into an in-memory SQLite engine for transparent SQL translation
-<<<<<<< HEAD
-- Supports natural-language querying with Gemini `gemini-2.0-flash-lite`
-=======
 - Supports natural-language querying with Gemini `gemini-3.1-flash-lite-preview`
->>>>>>> 7719ca3 (feat: bonus features - SQL translation, streaming, conversation memory, highlighting, clustering)
 - Streams query progress and answer generation back to the UI
 - Maintains lightweight per-session conversation memory for follow-up questions
 - Visualizes graph structure, node metadata, analytics overlays, and query-driven highlights in React + Cytoscape.js
@@ -21,7 +17,7 @@ A full-stack graph exploration system for SAP Order-to-Cash data. The backend in
 
 The current dataset covers the order-to-cash chain:
 
-`Customer -> Order -> Delivery -> Invoice -> Payment`
+`Customer -> Order -> Delivery -> Invoice -> JournalEntry/Payment`
 
 Supported graph node types:
 
@@ -32,15 +28,28 @@ Supported graph node types:
 - `Customer`
 - `Product`
 - `Address`
+- `Plant`
+- `JournalEntry`
 
 Primary edge patterns:
 
 - `Order -> Delivery`
 - `Delivery -> Invoice`
 - `Invoice -> Payment`
+- `Invoice -> JournalEntry`
 - `Order -> Customer`
 - `Order -> Product`
+- `Delivery -> Product`
 - `Customer -> Address`
+- `Customer -> Delivery`
+- `Delivery -> Plant`
+- `Product -> Plant`
+
+Dataset note:
+
+- The provided SAP data contains Sales Orders, not Purchase Orders.
+- The assignment mentions Purchase Orders, but the available source files use Sales Order terminology.
+- `Order -> Product` models the available SalesOrderItem -> Material relationship.
 
 ## Architecture
 
@@ -81,44 +90,6 @@ Primary edge patterns:
 | graph routes | analytics | query | stream | session |
 +---------------------------------------------------+
 ```
-
-## Bonus Features
-
-### Transparent Query Translation
-
-Every natural-language query now returns:
-
-- human-readable answer
-- relevant node IDs for graph focus/highlighting
-- raw graph + SQL execution data
-- generated graph traversal string
-- generated SQL query string
-- execution time in milliseconds
-
-### Streaming Query UX
-
-`POST /api/query/stream` emits staged Server-Sent Events for:
-
-- guardrail
-- translation
-- generated query
-- execution
-- answer generation
-- token streaming
-- completion
-
-### Conversation Memory
-
-Each chat session keeps the last 10 turns in memory so follow-up prompts like `Which of these were delivered?` can reuse recent context.
-
-### Analytics
-
-The graph toolbar can now request:
-
-- clusters
-- important nodes
-- broken flows
-- reset view
 
 ## Repository Layout
 
@@ -178,7 +149,6 @@ Notes:
 - If `GEMINI_API_KEY` is missing or quota-limited, the backend falls back to deterministic mock translation/answer generation.
 - The current model target is `gemini-3.1-flash-lite-preview`.
 
-
 ## Running The Full App
 
 Start the backend first:
@@ -193,22 +163,19 @@ Then start the frontend in a second terminal:
 cd frontend
 npm run dev
 ```
-
 ## Sample Questions
 
+- Which products are associated with the highest number of billing documents?
+- Trace the full flow of billing document 90504204
+- Find sales orders with broken or incomplete flows
 - Show me all orders for customer 320000083
 - What invoices are linked to delivery 80738040?
 - Show the full chain from order 740509 to payment
 - Trace invoice 90504204 flow
-- Which products appear in the most orders?
 - Which of these have deliveries?
 - What about their invoices?
-- Find broken flows in the graph
-- Show important nodes
-- What is the weather in Mumbai today?
+- What is the capital of France?
   This should be rejected by the guardrail.
-
-More examples live in `backend/prompts/example_prompts.md`.
 
 ## API Highlights
 
@@ -227,42 +194,26 @@ More examples live in `backend/prompts/example_prompts.md`.
 - `POST /api/query/stream`
 - `DELETE /api/session/{session_id}`
 
+## Logging
+
+Every query appends a markdown entry to `backend/logs/llm_sessions.md` with:
+
+- timestamp
+- user question
+- guardrail result
+- translation prompt and response
+- parsed structured query
+- execution summary
+- answer prompt and response
+- final answer or error details
+
 ## Screenshots
 
 Add screenshots here as the UI is finalized.
 
-- `docs/screenshots/graph-overview.png` - full graph view placeholder
-- `docs/screenshots/node-detail.png` - node metadata panel placeholder
-- `docs/screenshots/chat-query.png` - natural-language query workflow placeholder
-- `docs/screenshots/subgraph-highlight.png` - graph highlight/subgraph placeholder
-- `docs/screenshots/sql-translation.png` - generated SQL panel placeholder
-- `docs/screenshots/analytics-overlays.png` - clusters/importance/broken-flow placeholder
-
-## Logging
-
-Every query appends a markdown entry to `backend/logs/llm_sessions.md`.
-
-The log captures:
-
-- guardrail decisions
-- translator prompt/response
-- normalized graph + SQL translation payload
-- answer-generation prompt/response
-- streaming fallback notes when Gemini quota is unavailable
-- final completion output
-
-## Verification Notes
-
-Validated locally during integration work with:
-
-- Python syntax checks for the updated backend modules
-- frontend production build via `npm --prefix frontend run build`
-- API smoke checks for:
-  - graph clusters
-  - graph importance
-  - graph broken flows
-  - `POST /api/query`
-  - `DELETE /api/session/{session_id}`
-  - `POST /api/query/stream`
-
-If Gemini quota is exhausted, the system still answers through deterministic fallback logic while preserving the same response contract.
+- `docs/screenshots/graph-overview.png`
+- `docs/screenshots/node-detail.png`
+- `docs/screenshots/chat-query.png`
+- `docs/screenshots/subgraph-highlight.png`
+- `docs/screenshots/sql-translation.png`
+- `docs/screenshots/analytics-overlays.png`
