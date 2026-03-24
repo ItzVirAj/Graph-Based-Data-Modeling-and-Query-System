@@ -8,108 +8,35 @@ A full-stack graph exploration system for SAP Order-to-Cash data. The backend in
 - Normalizes Orders, Deliveries, Invoices, Payments, Customers, Products, Addresses, Plants, and Journal Entries
 - Builds a typed relationship graph in NetworkX
 - Loads normalized entities into an in-memory SQLite engine for transparent SQL translation
-- Supports natural-language querying with Gemini `gemini-3.1-flash-lite-preview`
+- Supports natural-language querying with Gemini
 - Streams query progress and answer generation back to the UI
 - Maintains lightweight per-session conversation memory for follow-up questions
 - Visualizes graph structure, node metadata, analytics overlays, and query-driven highlights in React + Cytoscape.js
-
-## Dataset Scope
-
-The current dataset covers the order-to-cash chain:
-
-`Customer -> Order -> Delivery -> Invoice -> JournalEntry/Payment`
-
-Supported graph node types:
-
-- `Order`
-- `Delivery`
-- `Invoice`
-- `Payment`
-- `Customer`
-- `Product`
-- `Address`
-- `Plant`
-- `JournalEntry`
-
-Primary edge patterns:
-
-- `Order -> Delivery`
-- `Delivery -> Invoice`
-- `Invoice -> Payment`
-- `Invoice -> JournalEntry`
-- `Order -> Customer`
-- `Order -> Product`
-- `Delivery -> Product`
-- `Customer -> Address`
-- `Customer -> Delivery`
-- `Delivery -> Plant`
-- `Product -> Plant`
-
-Dataset note:
-
-- The provided SAP data contains Sales Orders, not Purchase Orders.
-- The assignment mentions Purchase Orders, but the available source files use Sales Order terminology.
-- `Order -> Product` models the available SalesOrderItem -> Material relationship.
-
-## Architecture
-
-```text
-+-----------------------+        +---------------------------+
-| Raw SAP O2C Files     |        | Frontend (React + Vite)   |
-| CSV / JSON / JSONL    |        | Cytoscape.js + Tailwind   |
-+-----------+-----------+        +-------------+-------------+
-            |                                      |
-            v                                      |
-+-----------+-----------+                          |
-| Data Loader            |                         |
-| format handling        |                         |
-| schema normalization   |                         |
-| Pydantic validation    |                         |
-+-----------+-----------+                          |
-            |                                      |
-            +-------------------+------------------+
-                                |
-                                v
-+-----------------------+   +-----------------------+
-| NetworkX Graph        |   | SQLite SQL Engine     |
-| typed nodes + edges   |   | normalized tables     |
-+-----------+-----------+   +-----------+-----------+
-            \___________________________/
-                        |
-                        v
-+---------------------------------------------------+
-| Query Pipeline                                     |
-| guardrail -> NL translation -> graph + SQL exec   |
-| conversation memory -> answer generation          |
-| sync response + SSE streaming                     |
-+---------------------------+-----------------------+
-                            |
-                            v
-+---------------------------+-----------------------+
-| FastAPI API                                       |
-| graph routes | analytics | query | stream | session |
-+---------------------------------------------------+
-```
 
 ## Repository Layout
 
 ```text
 backend/
   agents/              LLM client, memory, schema context, NL query pipeline
-  logs/                LLM session markdown logs
-  prompts/             example natural-language prompts
   routes/              FastAPI route modules
   services/            data loading, graph building, SQL engine, analytics, graph store
   tests/               backend tests
+  config.py            environment-driven runtime settings
+  Dockerfile           production backend image
   main.py              FastAPI entrypoint
 frontend/
   src/components/      graph viewer, toolbar, detail panel, chat panel
   src/services/        API client
   src/types/           frontend API and graph typings
+  Dockerfile           production frontend image
+  nginx.conf           SPA + API reverse proxy config
 sap-o2c-data/          raw SAP O2C files
+docker-compose.yml     production-like local deployment
 ```
 
-## Backend Setup
+## Local Development
+
+### Backend
 
 ```bash
 cd backend
@@ -118,12 +45,12 @@ python -m venv .venv
 pip install -r requirements.txt
 cd ..
 copy .env.example .env
-uvicorn backend.main:app --reload
+python -m backend
 ```
 
 Backend API is available at `http://localhost:8000`.
 
-## Frontend Setup
+### Frontend
 
 ```bash
 cd frontend
@@ -138,31 +65,79 @@ Frontend is available at `http://localhost:5173`.
 Create a root `.env` file from `.env.example`.
 
 ```env
+APP_ENV=development
+API_HOST=0.0.0.0
+API_PORT=8000
+LOG_LEVEL=INFO
+ALLOWED_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
+DATA_DIR=./sap-o2c-data
 GEMINI_API_KEY=your_gemini_api_key_here
-OPENAI_API_KEY=
-VITE_API_BASE_URL=http://localhost:8000
+VITE_API_BASE_URL=
+VITE_API_PROXY_TARGET=http://localhost:8000
 ```
 
 Notes:
 
-- Gemini is the active provider.
-- If `GEMINI_API_KEY` is missing or quota-limited, the backend falls back to deterministic mock translation/answer generation.
-- The current model target is `gemini-3.1-flash-lite-preview`.
+- Leave `VITE_API_BASE_URL` empty when the frontend is served from the same host and proxies `/api` through Nginx.
+- Set `VITE_API_BASE_URL` only when the frontend must call a separate backend origin directly.
+- `ALLOWED_ORIGINS` is a comma-separated list consumed by FastAPI CORS middleware.
+- `DATA_DIR` must point to the bundled SAP dataset directory in the target environment.
+- The backend exposes `GET /healthz` for container and platform health checks.
+- The production backend should stay at `WEB_CONCURRENCY=1` unless you intentionally want multiple in-memory graph copies.
 
-## Running The Full App
+## Deployment Ready Setup
 
-Start the backend first:
+### Option 1: Docker Compose on One Host
+
+This is the simplest production-style setup for this repository.
 
 ```bash
-uvicorn backend.main:app --reload
+copy .env.example .env
+# edit .env for your real domain + API key
+docker compose up --build -d
 ```
 
-Then start the frontend in a second terminal:
+App URLs:
+
+- Frontend: `http://localhost:8080`
+- Backend: `http://localhost:8000`
+- Health check: `http://localhost:8000/healthz`
+
+### Option 2: Separate Frontend and Backend Deployments
+
+Backend start command:
 
 ```bash
-cd frontend
-npm run dev
+gunicorn -k uvicorn.workers.UvicornWorker -w 1 -b 0.0.0.0:$PORT backend.main:app
 ```
+
+Frontend build command:
+
+```bash
+npm run build
+```
+
+Frontend publish directory:
+
+```text
+frontend/dist
+```
+
+If the frontend and backend are on different origins:
+
+- set `VITE_API_BASE_URL=https://your-api-domain`
+- set `ALLOWED_ORIGINS=https://your-frontend-domain`
+
+## Files To Edit During Deployment
+
+Use these exact files when promoting to staging or production:
+
+- `.env.example` -> copy to `.env` and set `GEMINI_API_KEY`, `ALLOWED_ORIGINS`, `DATA_DIR`, and optionally `VITE_API_BASE_URL`
+- `docker-compose.yml` -> update exposed ports and `ALLOWED_ORIGINS` if you are not using `localhost:8080`
+- `frontend/nginx.conf` -> update `proxy_pass http://backend:8000;` only if your frontend container must proxy to a differently named backend upstream
+- `frontend/Dockerfile` -> set `VITE_API_BASE_URL` build arg only when you need a hard-coded external API origin at build time
+- `backend/Dockerfile` -> adjust the gunicorn bind/worker command only if your hosting platform requires different port binding behavior
+
 ## Sample Questions
 
 - Which products are associated with the highest number of billing documents?
@@ -179,6 +154,7 @@ npm run dev
 
 ## API Highlights
 
+- `GET /healthz`
 - `GET /api/graph`
 - `GET /api/graph/stats`
 - `GET /api/graph/clusters`
@@ -193,27 +169,3 @@ npm run dev
 - `POST /api/query`
 - `POST /api/query/stream`
 - `DELETE /api/session/{session_id}`
-
-## Logging
-
-Every query appends a markdown entry to `backend/logs/llm_sessions.md` with:
-
-- timestamp
-- user question
-- guardrail result
-- translation prompt and response
-- parsed structured query
-- execution summary
-- answer prompt and response
-- final answer or error details
-
-## Screenshots
-
-Add screenshots here as the UI is finalized.
-
-- `docs/screenshots/graph-overview.png`
-- `docs/screenshots/node-detail.png`
-- `docs/screenshots/chat-query.png`
-- `docs/screenshots/subgraph-highlight.png`
-- `docs/screenshots/sql-translation.png`
-- `docs/screenshots/analytics-overlays.png`

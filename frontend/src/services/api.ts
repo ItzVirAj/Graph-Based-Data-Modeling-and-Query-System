@@ -12,10 +12,20 @@ import type {
   QueryResponse,
 } from "../types/api";
 
-export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
+const configuredApiBaseUrl = import.meta.env.VITE_API_BASE_URL?.trim() ?? "";
+
+export const API_BASE_URL = configuredApiBaseUrl;
+
+function buildApiUrl(path: string): string {
+  if (!API_BASE_URL) {
+    return path;
+  }
+
+  return new URL(path, API_BASE_URL).toString();
+}
 
 const api = axios.create({
-  baseURL: API_BASE_URL,
+  baseURL: API_BASE_URL || undefined,
   headers: {
     "Content-Type": "application/json",
   },
@@ -122,7 +132,7 @@ function parseSseChunk(chunk: string, emit: (eventName: string, payload: Record<
 }
 
 export async function streamGraphQuery(question: string, sessionId: string, handlers: StreamHandlers): Promise<void> {
-  const response = await fetch(`${API_BASE_URL}/api/query/stream`, {
+  const response = await fetch(buildApiUrl("/api/query/stream"), {
     method: "POST",
     headers: {
       "Content-Type": "application/json",

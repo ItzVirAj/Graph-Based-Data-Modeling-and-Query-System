@@ -4272,7 +4272,7 @@ Bash
 cd C:\Projects\DodgeAI-Assignment
 git add -A
 git status
-git commit -m "final: complete system with all fixes verified - ready for submission"
+git commit -m "final: complete system"
 git log --oneline -10
 
 i want this as a short prompt and also gemini "gemini-3.1-flash-lite-preview"  is only working model rest all are deprecated
